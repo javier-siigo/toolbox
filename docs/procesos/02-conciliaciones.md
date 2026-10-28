@@ -10,9 +10,9 @@ Permite al equipo contable **conciliar el extracto bancario de un período** (y 
 | Uruguay (`UY`) | `/conciliaciones/uruguay` | Implementado |
 | Ecuador (`EC`) | `/conciliaciones/ecuador` | Implementado |
 | Chile (`CL`) | `/conciliaciones/chile` | Solo placeholder |
-| México (`MX`) | `/conciliaciones/mexico` | Solo placeholder |
+| México (`MX`) | `/conciliaciones/mexico` | Implementado (particularidades por banco) |
 
-Las tres páginas implementadas son idénticas salvo por el código de país: usan el mismo componente `ConciliacionesPageClient`.
+Las páginas implementadas usan el mismo componente `ConciliacionesPageClient`. Algunos bancos tienen **particularidades** que agregan pasos a la UI (ver más abajo).
 
 ## Acceso
 
@@ -89,7 +89,7 @@ Archivos: `src/app/api/conciliaciones/conciliar/route.ts`, `src/lib/conciliacion
 
 **Response esperada:** archivo binario (por defecto Excel `.xlsx`), con headers opcionales `X-Registros-Nuevos` y `X-Registros-Existentes` (enteros). Cualquier estado no 2xx, respuesta vacía, timeout o fallo de red se traduce a error.
 
-> Cada banco puede apuntar a un workflow distinto. **La lógica de conciliación vive en esos workflows**, no en este repo.
+> Todos los bancos apuntan al mismo webhook (`/webhook/reconciliation`). **n8n elige el adapter del banco según el campo `banco` (slug)**, por configuración en n8n; la lógica de conciliación vive allí, no en este repo. Un banco nuevo solo necesita su fila en `conciliacion_bancos` con un slug que coincida con su adapter.
 
 ## Datos
 
@@ -113,6 +113,21 @@ Lectura de la lista (`getBancosPorPais`): cliente admin, solo activos, ordenados
 
 Insertar o editar una fila en `conciliacion_bancos` (`pais`, `slug`, `nombre`, `webhook_url`, `activo = true`, `orden`). No requiere despliegue; aparece en la UI en ≤ 60 s por la caché. Para desactivarlo: `activo = false`.
 
+## Particularidades por banco
+
+Se declaran en `src/lib/conciliaciones/particularidades.ts` (clave `PAIS:slug`).
+
+### Conversión TXT → Excel (México · Banorte)
+
+Banorte entrega el extracto en uno o varios `.txt`. Con el banco `bananorte-mexico`, dentro de **Archivos a conciliar** aparece una línea discreta: "¿El extracto viene en uno o varios .txt? Convertir a Excel" (opcional). La conciliación queda en dos pasos:
+
+1. **Paso 1 — conversión.** El usuario elige uno o varios `.txt` (input `multiple`; hasta 31 archivos y 4 MB en total, porque van directo en el cuerpo, sin Storage). `POST /api/conciliaciones/convertir-txt` (multipart: `pais`, `banco`, `files[]`) los reenvía a `/webhook/banorte-txt-a-excel` como `file_0`, `file_1`, … con `x-webhook-secret`; timeout 120 s.
+   - **OK:** n8n devuelve un `.xlsx` consolidado y los headers `X-Archivos`, `X-Registros`, `X-Total-Neto`, `X-Alertas`, `X-Errores`, `X-Duplicados-Omitidos` y `X-Archivos-Error` (`[{archivo, error}]` con `encodeURIComponent`). La ruta los reenvía y la UI muestra el resumen y la lista de TXT que no se pudieron leer. El Excel se carga como **Extracto bancario** con el nombre `banorte_extracto.xlsx` y se puede descargar.
+   - **Error:** el cuerpo es JSON `{ error, archivosConError[] }`; la UI muestra "Falló el paso 1 (conversión de TXT)" con el detalle por archivo.
+2. **Paso 2 — conciliación.** Es el flujo normal (**Procesar conciliación** → `/webhook/reconciliation` con `banco=bananorte-mexico`, `file=banorte_extracto.xlsx` y `previous` si se subió). El botón muestra "Paso 2 de 2 · Conciliando…" y, si falla, "Falló el paso 2 (conciliación)". Timeout de 280 s (la función tiene `maxDuration = 300`).
+
+La configuración está en `src/lib/conciliaciones/particularidades.ts` (bancos con TXT y nombre del Excel) y la URL del webhook en `src/lib/conciliaciones/convertir-txt.ts` (solo servidor).
+
 ## Errores
 
 | Código | HTTP | Mensaje al usuario |
@@ -132,10 +147,10 @@ Insertar o editar una fila en `conciliacion_bancos` (`pais`, `slug`, `nombre`, `
 
 ## Archivos fuente
 
-- Páginas: `src/app/(app)/conciliaciones/{colombia,uruguay,ecuador}/page.tsx`
-- UI: `src/components/conciliaciones/` (`conciliaciones-page`, `bank-combobox`, `dual-upload-card`, `file-slot`, `types`)
-- API: `src/app/api/conciliaciones/{upload-url,conciliar}/route.ts`
-- Lógica: `src/lib/conciliaciones/{conciliar,bancos}.ts`
+- Páginas: `src/app/(app)/conciliaciones/{colombia,uruguay,ecuador,mexico}/page.tsx`
+- UI: `src/components/conciliaciones/` (`conciliaciones-page`, `bank-combobox`, `dual-upload-card`, `file-slot`, `txt-convert-row`, `types`)
+- API: `src/app/api/conciliaciones/{upload-url,conciliar,convertir-txt}/route.ts`
+- Lógica: `src/lib/conciliaciones/{conciliar,bancos,particularidades,convertir-txt}.ts`
 
 ## Hallazgos
 
@@ -143,5 +158,5 @@ Insertar o editar una fila en `conciliacion_bancos` (`pais`, `slug`, `nombre`, `
 2. `pais` no se valida contra la lista de países conocidos.
 3. Nombre `conciliarColombia` confuso: es genérico.
 4. No hay historial de conciliaciones; el resultado se pierde al recargar.
-5. Chile y México están en el menú pero sin implementación.
+5. Chile está en el menú pero sin implementación.
 6. La caché de bancos no se invalida manualmente (no hay `revalidateTag("conciliacion-bancos")`); depende del TTL de 60 s.

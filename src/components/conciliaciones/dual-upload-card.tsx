@@ -18,6 +18,8 @@ interface DualUploadCardProps {
   onSelectPrevio: (file: File) => void;
   onRemovePrevio: () => void;
   disabled?: boolean;
+  /** Paso previo propio del banco, entre el encabezado y los archivos. */
+  extra?: React.ReactNode;
 }
 
 export function DualUploadCard({
@@ -30,6 +32,7 @@ export function DualUploadCard({
   onSelectPrevio,
   onRemovePrevio,
   disabled,
+  extra,
 }: DualUploadCardProps) {
   return (
     <section
@@ -51,6 +54,8 @@ export function DualUploadCard({
           conciliación anterior que entregan los contadores. Esta última es opcional.
         </p>
       </header>
+
+      {extra}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SlotShell

@@ -7,8 +7,19 @@ import { toast } from "sonner";
 import { BankCombobox } from "./bank-combobox";
 import { DualUploadCard } from "./dual-upload-card";
 import { tourConciliaciones } from "./tour";
+import { TxtConvertRow, type TxtConversion } from "./txt-convert-row";
 import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
+import {
+  MAX_TXT_FILES,
+  MAX_TXT_TOTAL_BYTES,
+  MAX_TXT_TOTAL_LABEL,
+  getConversionTxt,
+  isTxtFilename,
+  parseArchivosConError,
+  requiereConversionTxt,
+  type ArchivoTxtConError,
+} from "@/lib/conciliaciones/particularidades";
 import { PREVIO_INVALID_TYPE_MESSAGE, isXlsxFilename } from "@/lib/uploads";
 import type {
   BancoConciliacion,
@@ -100,13 +111,19 @@ export function ConciliacionesPageClient({
   const [principalFile, setPrincipalFile] = React.useState<File | null>(null);
   const [previoFile, setPrevioFile] = React.useState<File | null>(null);
   const [currentRun, setCurrentRun] = React.useState<ConciliacionRun | null>(null);
+  const [txtFiles, setTxtFiles] = React.useState<File[]>([]);
+  const [txtConversion, setTxtConversion] = React.useState<TxtConversion>({
+    status: "idle",
+  });
 
   const abortRef = React.useRef<AbortController | null>(null);
+  const txtAbortRef = React.useRef<AbortController | null>(null);
   const blobUrlsRef = React.useRef<Map<string, string>>(new Map());
 
   React.useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      txtAbortRef.current?.abort();
       for (const url of blobUrlsRef.current.values()) {
         URL.revokeObjectURL(url);
       }
@@ -140,12 +157,136 @@ export function ConciliacionesPageClient({
     setPrevioFile(null);
   }, []);
 
+  const resetTxt = React.useCallback(() => {
+    txtAbortRef.current?.abort();
+    txtAbortRef.current = null;
+    setTxtFiles([]);
+    setTxtConversion({ status: "idle" });
+  }, []);
+
   const handleClearBanco = React.useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    resetTxt();
     setBanco(null);
     setCurrentRun(null);
-  }, []);
+  }, [resetTxt]);
+
+  const convertTxt = React.useCallback(
+    async (bancoSel: BancoConciliacion, files: File[]) => {
+      const config = getConversionTxt(pais, bancoSel.slug);
+      if (!config) return;
+      const controller = new AbortController();
+      txtAbortRef.current?.abort();
+      txtAbortRef.current = controller;
+      setTxtConversion({ status: "processing" });
+
+      const failTxt = (message: string, archivosConError: ArchivoTxtConError[] = []) => {
+        setTxtConversion({ status: "error", error: message, archivosConError });
+        toast.error(`Paso 1 (conversión de TXT): ${message}`);
+      };
+
+      try {
+        const form = new FormData();
+        form.append("pais", pais);
+        form.append("banco", bancoSel.slug);
+        for (const file of files) form.append("files", file, file.name);
+        const res = await fetch("/api/conciliaciones/convertir-txt", {
+          method: "POST",
+          body: form,
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as
+            | { error?: string; code?: string; archivosConError?: unknown }
+            | null;
+          failTxt(
+            payload?.error ?? "No se pudieron convertir los TXT. Intenta de nuevo.",
+            parseArchivosConError(payload?.archivosConError),
+          );
+          return;
+        }
+
+        const blob = await res.blob();
+        const excel = new File([blob], config.extractoFilename, {
+          type:
+            blob.type ||
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+
+        const num = (h: string) => parseCountHeader(res.headers.get(h));
+        setTxtConversion({
+          status: "done",
+          excel,
+          resumen: {
+            archivos: num("x-archivos"),
+            registros: num("x-registros"),
+            totalNeto: num("x-total-neto"),
+            alertas: num("x-alertas"),
+            errores: num("x-errores"),
+            duplicadosOmitidos: num("x-duplicados-omitidos"),
+          },
+          archivosConError: parseArchivosConError(res.headers.get("x-archivos-error")),
+        });
+        // El Excel consolidado es el extracto que se concilia en el paso 2.
+        setPrincipalFile(excel);
+        setCurrentRun((prev) =>
+          prev && (prev.status === "done" || prev.status === "error") ? null : prev,
+        );
+        toast.success("Paso 1 listo: TXT convertidos y cargados como extracto");
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        failTxt((err as Error).message || "No se pudo contactar el servicio de conversión.");
+      } finally {
+        if (txtAbortRef.current === controller) txtAbortRef.current = null;
+      }
+    },
+    [pais],
+  );
+
+  const handleSelectTxt = React.useCallback(
+    (files: File[]) => {
+      if (!banco) return;
+      const noTxt = files.find((f) => !isTxtFilename(f.name));
+      if (noTxt) {
+        toast.error(`${noTxt.name} no es un archivo .txt.`);
+        return;
+      }
+      if (files.length > MAX_TXT_FILES) {
+        toast.error(`Puedes subir hasta ${MAX_TXT_FILES} archivos TXT a la vez.`);
+        return;
+      }
+      if (files.reduce((sum, f) => sum + f.size, 0) > MAX_TXT_TOTAL_BYTES) {
+        toast.error(`Los TXT superan el límite de ${MAX_TXT_TOTAL_LABEL} en total.`);
+        return;
+      }
+      setTxtFiles(files);
+      void convertTxt(banco, files);
+    },
+    [banco, convertTxt],
+  );
+
+  const handleRetryTxt = React.useCallback(() => {
+    if (banco && txtFiles.length > 0) void convertTxt(banco, txtFiles);
+  }, [banco, txtFiles, convertTxt]);
+
+  const handleDownloadTxtExcel = React.useCallback(() => {
+    const excel = txtConversion.excel;
+    if (!excel) return;
+    const url = URL.createObjectURL(excel);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = excel.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, [txtConversion.excel]);
+
+  const handleUsarTxtComoExtracto = React.useCallback(() => {
+    if (txtConversion.excel) handleSelectPrincipal(txtConversion.excel);
+  }, [txtConversion.excel, handleSelectPrincipal]);
 
   async function uploadOne(
     args: UploadArgs,
@@ -215,6 +356,11 @@ export function ConciliacionesPageClient({
       abortRef.current = controller;
       const { signal } = controller;
 
+      // Con conversión de TXT la conciliación es el paso 2 de 2.
+      const pasoLabel = requiereConversionTxt(pais, bancoSel.slug)
+        ? "Paso 2 (conciliación): "
+        : "";
+
       const fail = (message: string) => {
         const failed: ConciliacionRun = {
           ...baseRun,
@@ -223,7 +369,7 @@ export function ConciliacionesPageClient({
           finishedAt: Date.now(),
         };
         setCurrentRun(failed);
-        toast.error(message);
+        toast.error(`${pasoLabel}${message}`);
       };
 
       try {
@@ -348,7 +494,9 @@ export function ConciliacionesPageClient({
 
   const isBusy =
     currentRun?.status === "uploading" || currentRun?.status === "processing";
-  const canSubmit = !!banco && !!principalFile && !isBusy;
+  const isConvertingTxt = txtConversion.status === "processing";
+  const canSubmit = !!banco && !!principalFile && !isBusy && !isConvertingTxt;
+  const conTxt = !!banco && requiereConversionTxt(pais, banco.slug);
 
   const idleFileStatus: ConciliacionRunStatus = "idle";
   const principalStatus: ConciliacionRunStatus =
@@ -361,7 +509,10 @@ export function ConciliacionesPageClient({
       ? idleFileStatus
       : (currentRun?.status ?? idleFileStatus);
 
-  const tour = React.useMemo(() => tourConciliaciones(PAIS_LABEL[pais]), [pais]);
+  const tour = React.useMemo(
+    () => tourConciliaciones(PAIS_LABEL[pais], { conTxt }),
+    [pais, conTxt],
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -420,7 +571,24 @@ export function ConciliacionesPageClient({
         onRemovePrincipal={handleRemovePrincipal}
         onSelectPrevio={handleSelectPrevio}
         onRemovePrevio={handleRemovePrevio}
-        disabled={isBusy}
+        disabled={isBusy || isConvertingTxt}
+        extra={
+          conTxt && (
+            <TxtConvertRow
+              txtFiles={txtFiles}
+              conversion={txtConversion}
+              enUsoComoExtracto={
+                !!txtConversion.excel && principalFile === txtConversion.excel
+              }
+              onSelect={handleSelectTxt}
+              onRemove={resetTxt}
+              onRetry={handleRetryTxt}
+              onDownload={handleDownloadTxtExcel}
+              onUsarComoExtracto={handleUsarTxtComoExtracto}
+              disabled={isBusy}
+            />
+          )
+        }
       />
 
       <div
@@ -442,12 +610,21 @@ export function ConciliacionesPageClient({
               </span>
             </p>
           )}
+        {conTxt && currentRun?.status === "error" && (
+          <p className="mr-auto text-sm text-destructive" role="alert">
+            Falló el paso 2 (conciliación): {currentRun.error}
+          </p>
+        )}
         <Button
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
         >
-          {isBusy ? "Procesando…" : "Procesar conciliación"}
+          {isBusy
+            ? conTxt
+              ? "Paso 2 de 2 · Conciliando…"
+              : "Procesando…"
+            : "Procesar conciliación"}
         </Button>
         {currentRun?.status === "done" && (
           <Button
