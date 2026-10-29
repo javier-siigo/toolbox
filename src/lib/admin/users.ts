@@ -51,7 +51,7 @@ export async function listUsersWithRoles(): Promise<
   const admin = createAdminClient();
 
   const { data: rolesData, error: rolesError } = await admin
-    .from("user_roles")
+    .schema("core").from("user_roles")
     .select("user_id, roles, paises");
   if (rolesError) throw new Error(rolesError.message);
 
@@ -64,7 +64,7 @@ export async function listUsersWithRoles(): Promise<
   }
 
   const { data: activityData, error: activityError } = await admin
-    .from("user_activity")
+    .schema("core").from("user_activity")
     .select("user_id, last_seen_at");
   if (activityError) throw new Error(activityError.message);
   const lastSeen = new Map<string, string>(
@@ -141,7 +141,7 @@ export async function updateUserRoles(
 
   const admin = createAdminClient();
   const { error } = await admin
-    .from("user_roles")
+    .schema("core").from("user_roles")
     .upsert(
       {
         user_id: parsed.data.userId,
@@ -175,7 +175,7 @@ export async function deleteOrphanRoles(
     return { ok: false, error: "El usuario tiene cuenta en Auth; quítale los roles en su lugar." };
   }
 
-  const { error } = await admin.from("user_roles").delete().eq("user_id", parsed.data);
+  const { error } = await admin.schema("core").from("user_roles").delete().eq("user_id", parsed.data);
   if (error) return { ok: false, error: error.message };
 
   revalidateTag("user-roles", "max");

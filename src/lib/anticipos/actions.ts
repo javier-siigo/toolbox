@@ -50,7 +50,7 @@ const SIN_PERMISOS = "No tienes permisos para gestionar anticipos.";
 /**
  * Las server actions son un endpoint público: la autorización de la página
  * (`requireProcesoAccess`) no las cubre. Cada acción debe validar sesión y rol
- * aquí, y las políticas de RLS de `anticipos_registros` lo respaldan.
+ * aquí, y las políticas de RLS de `anticipos.registros` lo respaldan.
  */
 async function requireIngresos() {
   const supabase = await createClient();
@@ -74,7 +74,7 @@ export async function getAnticiposAll(): Promise<AnticipoRow[]> {
   const supabase = guard.supabase;
 
   const { data, error } = await supabase
-    .from("anticipos_registros")
+    .schema("anticipos").from("registros")
     .select(
       "id, nombre, requerimiento, falta, observacion_1, observacion_2, fecha_rq, fecha_gestion, created_at, nombre_normalizado",
     )
@@ -95,7 +95,7 @@ export async function getAnticiposAll(): Promise<AnticipoRow[]> {
 
   const matchesByQuery = new Map<string, RetiradoMatch>();
   if (names.length > 0) {
-    const { data: matches, error: matchErr } = await supabase.rpc(
+    const { data: matches, error: matchErr } = await supabase.schema("anticipos").rpc(
       "match_colaborador_retirado_batch",
       { p_inputs: names },
     );
@@ -166,7 +166,7 @@ export async function createAnticipo(
 
   const payload: AnticipoCreateInput = parsed.data;
 
-  const { error } = await supabase.from("anticipos_registros").insert({
+  const { error } = await supabase.schema("anticipos").from("registros").insert({
     nombre: payload.nombre,
     requerimiento: payload.requerimiento,
     falta: payload.falta,
@@ -239,7 +239,7 @@ export async function updateAnticipo(
   const payload: AnticipoUpdateInput = parsed.data;
 
   const { error } = await supabase
-    .from("anticipos_registros")
+    .schema("anticipos").from("registros")
     .update({
       nombre: payload.nombre,
       requerimiento: payload.requerimiento,
@@ -290,7 +290,7 @@ export async function deleteAnticipo(
   const supabase = guard.supabase;
 
   const { error } = await supabase
-    .from("anticipos_registros")
+    .schema("anticipos").from("registros")
     .delete()
     .eq("id", parsed.data.id);
 
@@ -321,7 +321,7 @@ export async function legalizeAnticipo(
   const userId = guard.userId!;
 
   const { error } = await supabase
-    .from("anticipos_registros")
+    .schema("anticipos").from("registros")
     .update({
       falta: "legalizado",
       observacion_1: "legalizado",

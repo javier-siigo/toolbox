@@ -68,7 +68,7 @@ Archivos: `src/app/api/conciliaciones/conciliar/route.ts`, `src/lib/conciliacion
 
 1. Valida sesión y cuerpo. `maxDuration = 90` s.
 2. Comprueba que `storagePathPrincipal` (y `storagePathPrevio`) empiecen por `{userId}/principal/` o `{userId}/previo/` y no contengan más `/`. Si no: 403 `storage_unauthorized`. Si hay previo y su nombre original no es `.xlsx`: 415 `invalid_type`.
-3. Busca el banco (`getBancoPorSlug`) en `conciliacion_bancos` por `pais` + `slug`. Si no existe o `activo = false`: 400 `upstream_config`.
+3. Busca el banco (`getBancoPorSlug`) en `conciliaciones.bancos` por `pais` + `slug`. Si no existe o `activo = false`: 400 `upstream_config`.
 4. `conciliarColombia(...)` (nombre histórico; sirve a todos los países):
    - Descarga cada archivo del bucket con el cliente admin y los **revalida** (no vacío, ≤ 10 MB, tipo).
    - Arma `FormData` y hace `POST` al `webhook_url` del banco con header `x-webhook-secret` y timeout de **60 s**.
@@ -89,11 +89,11 @@ Archivos: `src/app/api/conciliaciones/conciliar/route.ts`, `src/lib/conciliacion
 
 **Response esperada:** archivo binario (por defecto Excel `.xlsx`), con headers opcionales `X-Registros-Nuevos` y `X-Registros-Existentes` (enteros). Cualquier estado no 2xx, respuesta vacía, timeout o fallo de red se traduce a error.
 
-> Todos los bancos apuntan al mismo webhook (`/webhook/reconciliation`). **n8n elige el adapter del banco según el campo `banco` (slug)**, por configuración en n8n; la lógica de conciliación vive allí, no en este repo. Un banco nuevo solo necesita su fila en `conciliacion_bancos` con un slug que coincida con su adapter.
+> Todos los bancos apuntan al mismo webhook (`/webhook/reconciliation`). **n8n elige el adapter del banco según el campo `banco` (slug)**, por configuración en n8n; la lógica de conciliación vive allí, no en este repo. Un banco nuevo solo necesita su fila en `conciliaciones.bancos` con un slug que coincida con su adapter.
 
 ## Datos
 
-Tabla `conciliacion_bancos` (esquema desde `types/supabase.ts`):
+Tabla `conciliaciones.bancos` (esquema desde `types/supabase.ts`):
 
 | Columna | Descripción |
 |---|---|
@@ -111,7 +111,7 @@ Lectura de la lista (`getBancosPorPais`): cliente admin, solo activos, ordenados
 
 ### Cómo agregar o cambiar un banco
 
-Insertar o editar una fila en `conciliacion_bancos` (`pais`, `slug`, `nombre`, `webhook_url`, `activo = true`, `orden`). No requiere despliegue; aparece en la UI en ≤ 60 s por la caché. Para desactivarlo: `activo = false`.
+Insertar o editar una fila en `conciliaciones.bancos` (`pais`, `slug`, `nombre`, `webhook_url`, `activo = true`, `orden`). No requiere despliegue; aparece en la UI en ≤ 60 s por la caché. Para desactivarlo: `activo = false`.
 
 ## Particularidades por banco
 

@@ -27,7 +27,7 @@ export type ActionResult<T = undefined> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-type CampoRow = Database["public"]["Tables"]["netsuite_campos"]["Row"];
+type CampoRow = Database["export_bancos"]["Tables"]["campos"]["Row"];
 
 const CAMPO_COLS = "id, tabla, campo, modo, etiqueta, tipo, habilitado, orden";
 
@@ -116,11 +116,11 @@ export interface CamposData {
 /** Catálogo (completo para admin; solo habilitados para el resto) y plantillas. */
 export async function getCamposData(admin: boolean): Promise<CamposData> {
   const supabase = await createClient();
-  let camposQuery = supabase.from("netsuite_campos").select(CAMPO_COLS).order("orden").order("created_at");
+  let camposQuery = supabase.schema("export_bancos").from("campos").select(CAMPO_COLS).order("orden").order("created_at");
   if (!admin) camposQuery = camposQuery.eq("habilitado", true);
   const [camposRes, plantillasRes] = await Promise.all([
     camposQuery,
-    supabase.from("export_bancos_plantillas").select("id, nombre, campos, filtros, updated_at").order("nombre"),
+    supabase.schema("export_bancos").from("plantillas").select("id, nombre, campos, filtros, updated_at").order("nombre"),
   ]);
   const error = camposRes.error ?? plantillasRes.error;
   if (error) throw new Error(dbError(error.message, error.code));
@@ -143,7 +143,7 @@ export async function descubrirCamposAction(): Promise<ActionResult<CampoDescubi
   const { supabase, error } = await requireAdminAction();
   if (error) return { ok: false, error };
 
-  const { data, error: dbErr } = await supabase.from("netsuite_campos").select("tabla, campo, modo");
+  const { data, error: dbErr } = await supabase.schema("export_bancos").from("campos").select("tabla, campo, modo");
   if (dbErr) return { ok: false, error: dbError(dbErr.message, dbErr.code) };
   const existentes = new Set(
     (data ?? []).map((c) => claveCampo(c as Pick<CampoCatalogo, "tabla" | "campo" | "modo">)),
@@ -167,7 +167,7 @@ export async function agregarCampos(
   if (error) return { ok: false, error };
 
   const { data: last } = await supabase
-    .from("netsuite_campos")
+    .schema("export_bancos").from("campos")
     .select("orden")
     .order("orden", { ascending: false })
     .limit(1)
@@ -175,7 +175,7 @@ export async function agregarCampos(
   const base = last?.orden ?? 0;
 
   const { data, error: dbErr } = await supabase
-    .from("netsuite_campos")
+    .schema("export_bancos").from("campos")
     .insert(parsed.data.map((c, i) => ({ ...c, orden: base + i + 1 })))
     .select(CAMPO_COLS);
   if (dbErr) return { ok: false, error: dbError(dbErr.message, dbErr.code) };
@@ -204,7 +204,7 @@ export async function actualizarCampo(
 
   const { supabase, error } = await requireAdminAction();
   if (error) return { ok: false, error };
-  const { error: dbErr } = await supabase.from("netsuite_campos").update(update).eq("id", id);
+  const { error: dbErr } = await supabase.schema("export_bancos").from("campos").update(update).eq("id", id);
   if (dbErr) {
     if (dbErr.code === "23514") {
       return { ok: false, error: "Los campos con nombre visible (BUILTIN.DF) solo pueden ser texto." };
@@ -226,7 +226,7 @@ export async function ordenarCampos(ids: string[]): Promise<ActionResult> {
   const now = new Date().toISOString();
   const results = await Promise.all(
     parsed.data.map((id, i) =>
-      supabase.from("netsuite_campos").update({ orden: i + 1, updated_at: now }).eq("id", id),
+      supabase.schema("export_bancos").from("campos").update({ orden: i + 1, updated_at: now }).eq("id", id),
     ),
   );
   const dbErr = results.find((r) => r.error)?.error;
@@ -254,7 +254,7 @@ export async function crearPlantilla(
   if (error) return { ok: false, error };
 
   const { data, error: dbErr } = await supabase
-    .from("export_bancos_plantillas")
+    .schema("export_bancos").from("plantillas")
     .insert({ nombre: n.data, campos: c.data, filtros: f.data as Json })
     .select("id, nombre, campos, filtros, updated_at")
     .single();
@@ -305,7 +305,7 @@ export async function actualizarPlantilla(
     update.filtros = f.data as Json;
   }
 
-  const { error: dbErr } = await supabase.from("export_bancos_plantillas").update(update).eq("id", id);
+  const { error: dbErr } = await supabase.schema("export_bancos").from("plantillas").update(update).eq("id", id);
   if (dbErr) return { ok: false, error: dbError(dbErr.message, dbErr.code) };
 
   revalidatePath(PATH);
@@ -315,7 +315,7 @@ export async function actualizarPlantilla(
 export async function eliminarPlantilla(id: string): Promise<ActionResult> {
   const { supabase, error } = await requireIngresosAction();
   if (error) return { ok: false, error };
-  const { error: dbErr } = await supabase.from("export_bancos_plantillas").delete().eq("id", id);
+  const { error: dbErr } = await supabase.schema("export_bancos").from("plantillas").delete().eq("id", id);
   if (dbErr) return { ok: false, error: dbError(dbErr.message, dbErr.code) };
 
   revalidatePath(PATH);

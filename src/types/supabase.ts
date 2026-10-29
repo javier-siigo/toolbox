@@ -10,21 +10,21 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
-  public: {
+  anticipos: {
     Tables: {
-      anticipos_registros: {
+      registros: {
         Row: {
           created_at: string
           created_by: string
-          falta: Database["public"]["Enums"]["anticipos_falta_enum"]
+          falta: Database["anticipos"]["Enums"]["falta"]
           fecha_gestion: string | null
           fecha_rq: string
           id: string
           nombre: string
           nombre_normalizado: string | null
-          observacion_1: Database["public"]["Enums"]["anticipos_observacion_1_enum"]
+          observacion_1: Database["anticipos"]["Enums"]["observacion_1"]
           observacion_2: string | null
           requerimiento: string
           updated_at: string
@@ -33,12 +33,12 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by: string
-          falta: Database["public"]["Enums"]["anticipos_falta_enum"]
+          falta: Database["anticipos"]["Enums"]["falta"]
           fecha_gestion?: string | null
           fecha_rq: string
           id?: string
           nombre: string
-          observacion_1: Database["public"]["Enums"]["anticipos_observacion_1_enum"]
+          observacion_1: Database["anticipos"]["Enums"]["observacion_1"]
           observacion_2?: string | null
           requerimiento: string
           updated_at?: string
@@ -47,12 +47,12 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string
-          falta?: Database["public"]["Enums"]["anticipos_falta_enum"]
+          falta?: Database["anticipos"]["Enums"]["falta"]
           fecha_gestion?: string | null
           fecha_rq?: string
           id?: string
           nombre?: string
-          observacion_1?: Database["public"]["Enums"]["anticipos_observacion_1_enum"]
+          observacion_1?: Database["anticipos"]["Enums"]["observacion_1"]
           observacion_2?: string | null
           requerimiento?: string
           updated_at?: string
@@ -60,7 +60,7 @@ export type Database = {
         }
         Relationships: []
       }
-      colaboradores_retirados: {
+      retirados: {
         Row: {
           cedula: number
           created_at: string
@@ -88,7 +88,7 @@ export type Database = {
         }
         Relationships: []
       }
-      colaboradores_retirados_imports: {
+      retirados_imports: {
         Row: {
           errors: number
           file_name: string
@@ -121,7 +121,65 @@ export type Database = {
         }
         Relationships: []
       }
-      comisiones_bases: {
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      match_colaborador_retirado: {
+        Args: { p_input: string }
+        Returns: {
+          cedula: number
+          fecha_reporte: string
+          nivel: string
+          nombre: string
+          observacion: string
+          tokens_comunes: string[]
+          tokens_extra: string[]
+          valor: number
+        }[]
+      }
+      match_colaborador_retirado_batch: {
+        Args: { p_inputs: string[] }
+        Returns: {
+          cedula: number
+          fecha_reporte: string
+          nivel: string
+          nombre: string
+          observacion: string
+          query: string
+          tokens_comunes: string[]
+          tokens_extra: string[]
+          valor: number
+        }[]
+      }
+    }
+    Enums: {
+      falta:
+        | "permisos_de_soportes"
+        | "revisar_descuento_nomina"
+        | "autorizacion_descuento_nomina"
+        | "legalizado"
+        | "revisar_soportes"
+        | "devolucion"
+        | "autorizacion_soportes"
+        | "revisar_con_harold"
+        | "soportes"
+      observacion_1:
+        | "no_se_ha_contactado"
+        | "escrito_1_vez"
+        | "escrito_2_veces"
+        | "escrito_3_veces"
+        | "legalizado"
+        | "correo_al_lider"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  comisiones: {
+    Tables: {
+      bases: {
         Row: {
           facturas: number
           notas_credito: number
@@ -148,7 +206,7 @@ export type Database = {
         }
         Relationships: []
       }
-      comisiones_cierres: {
+      cierres: {
         Row: {
           archivo_nombre: string
           archivo_tamano: number
@@ -190,7 +248,7 @@ export type Database = {
         }
         Relationships: []
       }
-      comisiones_conceptos: {
+      conceptos: {
         Row: {
           activo: boolean
           created_at: string
@@ -223,39 +281,7 @@ export type Database = {
         }
         Relationships: []
       }
-      comisiones_periodo_valores: {
-        Row: {
-          concepto_id: string
-          periodo: string
-          updated_at: string
-          updated_by: string | null
-          valor: number
-        }
-        Insert: {
-          concepto_id: string
-          periodo: string
-          updated_at?: string
-          updated_by?: string | null
-          valor?: number
-        }
-        Update: {
-          concepto_id?: string
-          periodo?: string
-          updated_at?: string
-          updated_by?: string | null
-          valor?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "comisiones_periodo_valores_concepto_id_fkey"
-            columns: ["concepto_id"]
-            isOneToOne: false
-            referencedRelation: "comisiones_conceptos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      comisiones_gasto_registrado: {
+      gasto_registrado: {
         Row: {
           cohorte: string
           concepto_id: string
@@ -283,9 +309,49 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_gasto_registrado_concepto_id_fkey"
+            columns: ["concepto_id"]
+            isOneToOne: false
+            referencedRelation: "conceptos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      comisiones_reconocimientos: {
+      periodo_valores: {
+        Row: {
+          concepto_id: string
+          periodo: string
+          updated_at: string
+          updated_by: string | null
+          valor: number
+        }
+        Insert: {
+          concepto_id: string
+          periodo: string
+          updated_at?: string
+          updated_by?: string | null
+          valor?: number
+        }
+        Update: {
+          concepto_id?: string
+          periodo?: string
+          updated_at?: string
+          updated_by?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_periodo_valores_concepto_id_fkey"
+            columns: ["concepto_id"]
+            isOneToOne: false
+            referencedRelation: "conceptos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reconocimientos: {
         Row: {
           cohorte: string
           fuente: string
@@ -318,7 +384,26 @@ export type Database = {
         }
         Relationships: []
       }
-      conciliacion_bancos: {
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      guardar_cierre: {
+        Args: { p_cierre: Json; p_periodo: string; p_reconocimientos: Json }
+        Returns: undefined
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  conciliaciones: {
+    Tables: {
+      bancos: {
         Row: {
           activo: boolean
           created_at: string
@@ -360,122 +445,22 @@ export type Database = {
         }
         Relationships: []
       }
-      export_bancos_plantillas: {
-        Row: {
-          campos: string[]
-          created_at: string
-          created_by: string | null
-          filtros: Json
-          id: string
-          nombre: string
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          campos?: string[]
-          created_at?: string
-          created_by?: string | null
-          filtros?: Json
-          id?: string
-          nombre: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          campos?: string[]
-          created_at?: string
-          created_by?: string | null
-          filtros?: Json
-          id?: string
-          nombre?: string
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: []
-      }
-      netsuite_campo_valores: {
-        Row: {
-          actualizado_at: string
-          campo_id: string
-          desde: string
-          dias_sin_datos: number
-          distintos: number
-          hasta: string
-          truncado: boolean
-          valores: Json
-        }
-        Insert: {
-          actualizado_at?: string
-          campo_id: string
-          desde: string
-          dias_sin_datos?: number
-          distintos?: number
-          hasta: string
-          truncado?: boolean
-          valores?: Json
-        }
-        Update: {
-          actualizado_at?: string
-          campo_id?: string
-          desde?: string
-          dias_sin_datos?: number
-          distintos?: number
-          hasta?: string
-          truncado?: boolean
-          valores?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "netsuite_campo_valores_campo_id_fkey"
-            columns: ["campo_id"]
-            isOneToOne: true
-            referencedRelation: "netsuite_campos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      netsuite_campos: {
-        Row: {
-          campo: string
-          created_at: string
-          created_by: string | null
-          etiqueta: string
-          habilitado: boolean
-          id: string
-          modo: string
-          orden: number
-          tabla: string
-          tipo: string
-          updated_at: string
-        }
-        Insert: {
-          campo: string
-          created_at?: string
-          created_by?: string | null
-          etiqueta: string
-          habilitado?: boolean
-          id?: string
-          modo?: string
-          orden?: number
-          tabla: string
-          tipo?: string
-          updated_at?: string
-        }
-        Update: {
-          campo?: string
-          created_at?: string
-          created_by?: string | null
-          etiqueta?: string
-          habilitado?: boolean
-          id?: string
-          modo?: string
-          orden?: number
-          tabla?: string
-          tipo?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  core: {
+    Tables: {
       user_activity: {
         Row: {
           last_seen_at: string
@@ -517,62 +502,166 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      comisiones_guardar_cierre: {
-        Args: { p_cierre: Json; p_periodo: string; p_reconocimientos: Json }
-        Returns: undefined
-      }
-      current_user_has_role: { Args: { check_role: string }; Returns: boolean }
-      match_colaborador_retirado: {
-        Args: { p_input: string }
+      storage_archivos_vencidos: {
+        Args: { p_antes: string; p_buckets: string[] }
         Returns: {
-          cedula: number
-          fecha_reporte: string
-          nivel: string
-          nombre: string
-          observacion: string | null
-          tokens_comunes: string[]
-          tokens_extra: string[]
-          valor: number | null
+          bucket_id: string
+          name: string
         }[]
-      }
-      match_colaborador_retirado_batch: {
-        Args: { p_inputs: string[] }
-        Returns: {
-          cedula: number
-          fecha_reporte: string
-          nivel: string
-          nombre: string
-          observacion: string | null
-          query: string
-          tokens_comunes: string[]
-          tokens_extra: string[]
-          valor: number | null
-        }[]
-      }
-      normalize_colaborador_name_unsorted: {
-        Args: { n: string }
-        Returns: string
       }
       touch_last_seen: { Args: never; Returns: undefined }
     }
     Enums: {
-      anticipos_falta_enum:
-        | "permisos_de_soportes"
-        | "revisar_descuento_nomina"
-        | "autorizacion_descuento_nomina"
-        | "legalizado"
-        | "revisar_soportes"
-        | "devolucion"
-        | "autorizacion_soportes"
-        | "revisar_con_harold"
-        | "soportes"
-      anticipos_observacion_1_enum:
-        | "no_se_ha_contactado"
-        | "escrito_1_vez"
-        | "escrito_2_veces"
-        | "escrito_3_veces"
-        | "legalizado"
-        | "correo_al_lider"
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  export_bancos: {
+    Tables: {
+      campo_valores: {
+        Row: {
+          actualizado_at: string
+          campo_id: string
+          desde: string
+          dias_sin_datos: number
+          distintos: number
+          hasta: string
+          truncado: boolean
+          valores: Json
+        }
+        Insert: {
+          actualizado_at?: string
+          campo_id: string
+          desde: string
+          dias_sin_datos?: number
+          distintos?: number
+          hasta: string
+          truncado?: boolean
+          valores?: Json
+        }
+        Update: {
+          actualizado_at?: string
+          campo_id?: string
+          desde?: string
+          dias_sin_datos?: number
+          distintos?: number
+          hasta?: string
+          truncado?: boolean
+          valores?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "netsuite_campo_valores_campo_id_fkey"
+            columns: ["campo_id"]
+            isOneToOne: true
+            referencedRelation: "campos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campos: {
+        Row: {
+          campo: string
+          created_at: string
+          created_by: string | null
+          etiqueta: string
+          habilitado: boolean
+          id: string
+          modo: string
+          orden: number
+          tabla: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          campo: string
+          created_at?: string
+          created_by?: string | null
+          etiqueta: string
+          habilitado?: boolean
+          id?: string
+          modo?: string
+          orden?: number
+          tabla: string
+          tipo?: string
+          updated_at?: string
+        }
+        Update: {
+          campo?: string
+          created_at?: string
+          created_by?: string | null
+          etiqueta?: string
+          habilitado?: boolean
+          id?: string
+          modo?: string
+          orden?: number
+          tabla?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      plantillas: {
+        Row: {
+          campos: string[]
+          created_at: string
+          created_by: string | null
+          filtros: Json
+          id: string
+          nombre: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          campos?: string[]
+          created_at?: string
+          created_by?: string | null
+          filtros?: Json
+          id?: string
+          nombre: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          campos?: string[]
+          created_at?: string
+          created_by?: string | null
+          filtros?: Json
+          id?: string
+          nombre?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -696,9 +785,9 @@ export type CompositeTypes<
   : never
 
 export const Constants = {
-  public: {
+  anticipos: {
     Enums: {
-      anticipos_falta_enum: [
+      falta: [
         "permisos_de_soportes",
         "revisar_descuento_nomina",
         "autorizacion_descuento_nomina",
@@ -709,7 +798,7 @@ export const Constants = {
         "revisar_con_harold",
         "soportes",
       ],
-      anticipos_observacion_1_enum: [
+      observacion_1: [
         "no_se_ha_contactado",
         "escrito_1_vez",
         "escrito_2_veces",
@@ -718,5 +807,20 @@ export const Constants = {
         "correo_al_lider",
       ],
     },
+  },
+  comisiones: {
+    Enums: {},
+  },
+  conciliaciones: {
+    Enums: {},
+  },
+  core: {
+    Enums: {},
+  },
+  export_bancos: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
   },
 } as const

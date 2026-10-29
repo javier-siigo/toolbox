@@ -71,7 +71,7 @@ export function vencido(v: Pick<ValoresCampo, "actualizadoAt">): boolean {
 
 export async function leerValoresGuardados(campoId: string): Promise<ValoresCampo | null> {
   const { data, error } = await createAdminClient()
-    .from("netsuite_campo_valores")
+    .schema("export_bancos").from("campo_valores")
     .select("valores, distintos, truncado, dias_sin_datos, desde, hasta, actualizado_at")
     .eq("campo_id", campoId)
     .maybeSingle();
@@ -103,7 +103,7 @@ export function refrescarValores(campo: CampoCatalogo, signal?: AbortSignal): Pr
 async function calcularYGuardar(campo: CampoCatalogo, signal?: AbortSignal): Promise<ValoresCampo> {
   const valores = await calcularValores(campo, signal);
   const { error } = await createAdminClient()
-    .from("netsuite_campo_valores")
+    .schema("export_bancos").from("campo_valores")
     .upsert({
       campo_id: campo.id,
       valores: valores.opciones as unknown as Json,

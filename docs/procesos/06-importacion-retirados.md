@@ -2,7 +2,7 @@
 
 ## Qué hace
 
-Mantiene la tabla **`colaboradores_retirados`** a partir del **reporte de Contabilidad de excolaboradores** (Excel). Sirve de base para marcar, en [Gestión de anticipos](05-gestion-anticipos.md), qué anticipos pertenecen a personas que ya salieron. Tiene tres puertas de entrada:
+Mantiene la tabla **`anticipos.retirados`** a partir del **reporte de Contabilidad de excolaboradores** (Excel). Sirve de base para marcar, en [Gestión de anticipos](05-gestion-anticipos.md), qué anticipos pertenecen a personas que ya salieron. Tiene tres puertas de entrada:
 
 | Vía | Quién | Cómo |
 |---|---|---|
@@ -14,8 +14,8 @@ Mantiene la tabla **`colaboradores_retirados`** a partir del **reporte de Contab
 
 | Conexión | Uso |
 |---|---|
-| Supabase BD con **service role** | Upsert en `colaboradores_retirados` y registro en `colaboradores_retirados_imports` |
-| Supabase RPC `match_colaborador_retirado` | Búsqueda del script `match:retirado` |
+| Supabase BD con **service role** | Upsert en `anticipos.retirados` y registro en `anticipos.retirados_imports` |
+| Supabase RPC `anticipos.match_colaborador_retirado` | Búsqueda del script `match:retirado` |
 | n8n / APIs externas | Ninguna |
 
 ## Importación
@@ -41,7 +41,7 @@ Las filas sin cédula numérica positiva o sin nombre se descartan en silencio.
 - Solo `.xlsx` / `.xls`; tamaño máximo **5 MB**; archivo no vacío.
 - Si no queda ninguna fila válida: error "El archivo no contiene filas válidas (se esperan columnas CEDULA, NOMBRE, TIENE ANTICIPO, VALOR, OBSERVACION)".
 - **Upsert** por `cedula` en lotes de **100** filas (`onConflict: cedula`). Si un lote falla, sus filas cuentan como `errors`.
-- Registra cada importación en `colaboradores_retirados_imports` (nombre y tamaño del archivo, filas totales, `upserted`, `errors`, quién importó).
+- Registra cada importación en `anticipos.retirados_imports` (nombre y tamaño del archivo, filas totales, `upserted`, `errors`, quién importó).
 - Resultado a la UI: `fileName`, `total`, `upserted`, `errors`.
 
 ### Permisos (versión web)
@@ -54,7 +54,7 @@ Las filas sin cédula numérica positiva o sin nombre se descartan en silencio.
 
 ## Búsqueda manual — `match:retirado`
 
-`scripts/match-retirado.ts`. Identifica a un excolaborador desde un nombre libre ("nombre apellido" o "apellido nombre") usando la RPC `match_colaborador_retirado`.
+`scripts/match-retirado.ts`. Identifica a un excolaborador desde un nombre libre ("nombre apellido" o "apellido nombre") usando la RPC `anticipos.match_colaborador_retirado`.
 
 ```bash
 npm run match:retirado -- "Juan Lopez"
@@ -72,10 +72,10 @@ npm run match:retirado -- --json --no-interactive "Juan Diego"
 
 | Tabla | Columnas |
 |---|---|
-| `colaboradores_retirados` | `cedula` (clave del upsert), `nombre`, `nombre_normalizado` (generada), `valor`, `observacion`, `fecha_reporte`, `created_at` |
-| `colaboradores_retirados_imports` | `id`, `file_name`, `file_size`, `total_rows`, `upserted`, `errors`, `imported_by`, `imported_at` |
+| `anticipos.retirados` | `cedula` (clave del upsert), `nombre`, `nombre_normalizado` (generada), `valor`, `observacion`, `fecha_reporte`, `created_at` |
+| `anticipos.retirados_imports` | `id`, `file_name`, `file_size`, `total_rows`, `upserted`, `errors`, `imported_by`, `imported_at` |
 
-Funciones SQL (migraciones `…120000` y `…130000`): `normalize_colaborador_name_unsorted(text)`, `match_colaborador_retirado(text)`, `match_colaborador_retirado_batch(text[])`. Detalle del algoritmo en [05](05-gestion-anticipos.md#cruce-con-excolaboradores).
+Funciones SQL (migraciones `…120000` y `…130000`): `private.normalize_colaborador_name_unsorted(text)`, `anticipos.match_colaborador_retirado(text)`, `anticipos.match_colaborador_retirado_batch(text[])`. Detalle del algoritmo en [05](05-gestion-anticipos.md#cruce-con-excolaboradores).
 
 ## Archivos fuente
 

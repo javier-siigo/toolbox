@@ -1,4 +1,4 @@
-// Particularidades de UI por banco (país + slug de `conciliacion_bancos`).
+// Particularidades de UI por banco (país + slug de `conciliaciones.bancos`).
 // Las URLs de los webhooks viven en el servidor (`convertir-txt.ts`).
 
 interface ConversionTxtConfig {

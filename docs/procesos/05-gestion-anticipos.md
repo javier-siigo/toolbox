@@ -6,19 +6,19 @@ Registro y seguimiento de **anticipos pendientes de legalizar**, por colaborador
 
 ## Acceso
 
-Ruta `/ingresos/gestion-anticipos`, área Ingresos (rol `ingresos` o `admin`). La página no valida rol en servidor; el sidebar solo la muestra a esos roles. Las reglas RLS de `anticipos_registros` no están en el repo.
+Ruta `/ingresos/gestion-anticipos`, área Ingresos (rol `ingresos` o `admin`). La página no valida rol en servidor; el sidebar solo la muestra a esos roles. Las reglas RLS de `anticipos.registros` no están en el repo.
 
 ## Conexiones
 
 | Conexión | Uso |
 |---|---|
-| Supabase BD (sesión del usuario) | CRUD sobre `anticipos_registros`; RPC `match_colaborador_retirado_batch` |
+| Supabase BD (sesión del usuario) | CRUD sobre `anticipos.registros`; RPC `anticipos.match_colaborador_retirado_batch` |
 | Supabase BD (service role) | Solo en la importación de retirados |
 | n8n / APIs externas | **Ninguna** |
 
 ## Modelo de datos
 
-Tabla `anticipos_registros`:
+Tabla `anticipos.registros`:
 
 | Columna | Tipo | Descripción |
 |---|---|---|
@@ -59,7 +59,7 @@ Todas exigen sesión (`auth.getUser`) y validan con zod (`schema.ts`). Tras escr
 
 | Acción | Qué hace |
 |---|---|
-| `getAnticiposAll()` | Lee hasta **1.000** registros (`MAX_ANTICIPOS_ROWS`), más recientes primero. Llama **una sola vez** a la RPC `match_colaborador_retirado_batch` con todos los nombres y adjunta a cada fila `es_retirado` y `retiro_info` (cédula, nombre en el reporte, valor, observación, fecha de reporte, nivel de coincidencia, tokens comunes/extra) |
+| `getAnticiposAll()` | Lee hasta **1.000** registros (`MAX_ANTICIPOS_ROWS`), más recientes primero. Llama **una sola vez** a la RPC `anticipos.match_colaborador_retirado_batch` con todos los nombres y adjunta a cada fila `es_retirado` y `retiro_info` (cédula, nombre en el reporte, valor, observación, fecha de reporte, nivel de coincidencia, tokens comunes/extra) |
 | `createAnticipo` | Valida formulario, inserta con `created_by/updated_by` = usuario. Duplicado → error de campo |
 | `updateAnticipo` | Actualiza todos los campos editables; fija `updated_by` |
 | `deleteAnticipo(id)` | Elimina por UUID |
@@ -79,10 +79,10 @@ Validaciones: `fecha_rq` debe ser una fecha válida; `fecha_gestion` puede ir va
 
 ## Cruce con excolaboradores
 
-Lo hace la función SQL `match_colaborador_retirado_batch` (migración `20261016130000`):
+Lo hace la función SQL `anticipos.match_colaborador_retirado_batch` (migración `20261016130000`):
 
 1. **Normaliza** nombres: minúsculas, sin tildes (`á→a`, `ñ→n`), sin símbolos, separa en tokens.
-2. Compara contra `colaboradores_retirados.nombre`. Un candidato es válido si **todos los tokens del nombre buscado están en el del reporte**.
+2. Compara contra `anticipos.retirados.nombre`. Un candidato es válido si **todos los tokens del nombre buscado están en el del reporte**.
 3. Clasifica el **nivel**: `exacto` (mismos tokens en el mismo orden) → `exacto_inverso` (orden "apellido nombre") → `parcial`.
 4. Por cada nombre consultado conserva el **mejor candidato** (`row_number`): primero el nivel, luego el que tenga **menos tokens extra** (segundo nombre/apellido), luego la cédula menor.
 

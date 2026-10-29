@@ -93,7 +93,7 @@ export async function camposHabilitados(
 ): Promise<Resultado<Map<string, CampoCatalogo>>> {
   if (ids.length === 0) return { ok: true, data: new Map() };
   const { data, error } = await supabase
-    .from("netsuite_campos")
+    .schema("export_bancos").from("campos")
     .select("id, tabla, campo, modo, etiqueta, tipo, habilitado, orden")
     .in("id", ids)
     .eq("habilitado", true)

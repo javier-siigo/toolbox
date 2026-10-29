@@ -47,20 +47,20 @@ src/
 ├── proxy.ts                          Protección de rutas + refresh de sesión (Next 16)
 └── types/supabase.ts                 Tipos generados de la BD
 scripts/                              CLI: import-retirados, match-retirado
-supabase/migrations/                  Migraciones SQL (solo comisiones y retirados)
+supabase/migrations/                  Migraciones SQL (ver "Base de datos: un schema por proceso")
 ```
 
 ## 3. Mapa de procesos
 
 | Proceso | Ruta | Rol requerido | n8n | Tablas / buckets Supabase | Doc |
 |---|---|---|---|---|---|
-| Conciliación Colombia / Uruguay / Ecuador | `/conciliaciones/{colombia,uruguay,ecuador}` | `conciliaciones` + país | Sí (webhook por banco) | `conciliacion_bancos`, bucket `conciliaciones-uploads` | [02](02-conciliaciones.md) |
+| Conciliación Colombia / Uruguay / Ecuador | `/conciliaciones/{colombia,uruguay,ecuador}` | `conciliaciones` + país | Sí (webhook por banco) | `conciliaciones.bancos`, bucket `conciliaciones-uploads` | [02](02-conciliaciones.md) |
 | Conciliación Chile / México | `/conciliaciones/{chile,mexico}` | `conciliaciones` + país | No (placeholder) | — | [02](02-conciliaciones.md) |
 | Notas crédito | `/ingresos/notas-credito` | `ingresos` | Sí (webhook fijo) | bucket `notas-credito-uploads` | [03](03-notas-credito.md) |
-| Cálculo de comisiones | `/ingresos/calculo-comisiones` | `ingresos` | No | `comisiones_*` (6 tablas + RPC) | [04](04-calculo-comisiones.md) |
-| Gestión y legalización de anticipos | `/ingresos/gestion-anticipos` | `ingresos` | No | `anticipos_registros`, `colaboradores_retirados` | [05](05-gestion-anticipos.md) |
-| Importación de excolaboradores | Sheet dentro de anticipos + CLI | `ingresos` o `admin` | No | `colaboradores_retirados`, `colaboradores_retirados_imports` | [06](06-importacion-retirados.md) |
-| Autenticación, roles y usuarios | `/login`, `/admin/usuarios` | `admin` (usuarios) | No | `user_roles`, `auth.users` | [01](01-autenticacion-y-roles.md) |
+| Cálculo de comisiones | `/ingresos/calculo-comisiones` | `ingresos` | No | `comisiones.*` (6 tablas + RPC) | [04](04-calculo-comisiones.md) |
+| Gestión y legalización de anticipos | `/ingresos/gestion-anticipos` | `ingresos` | No | `anticipos.registros`, `anticipos.retirados` | [05](05-gestion-anticipos.md) |
+| Importación de excolaboradores | Sheet dentro de anticipos + CLI | `ingresos` o `admin` | No | `anticipos.retirados`, `anticipos.retirados_imports` | [06](06-importacion-retirados.md) |
+| Autenticación, roles y usuarios | `/login`, `/admin/usuarios` | `admin` (usuarios) | No | `core.user_roles`, `auth.users` | [01](01-autenticacion-y-roles.md) |
 
 ## 4. Variables de entorno
 
@@ -75,7 +75,31 @@ Plantilla en `.env.example`; se copia a `.env.local`. Validadas en `src/lib/env.
 | `N8N_WEBHOOK_SECRET` | Servidor | Secreto compartido; se envía en el header `x-webhook-secret`. |
 | `N8N_NOTAS_CREDITO_PATH` | Servidor | Ruta del webhook de notas crédito. Por defecto `webhook/conciliacion-netsuite`. |
 
-> Los webhooks de las conciliaciones **no** usan variable de entorno: la URL completa vive por banco en la tabla `conciliacion_bancos.webhook_url`.
+> Los webhooks de las conciliaciones **no** usan variable de entorno: la URL completa vive por banco en la tabla `conciliaciones.bancos.webhook_url`.
+
+### Base de datos: un schema por proceso
+
+`public` queda vacío. Cada proceso tiene su schema y las tablas van sin prefijo (el schema ya dice de qué son):
+
+| Schema | Contenido |
+|---|---|
+| `core` | `user_roles`, `user_activity`, RPC `touch_last_seen`, `storage_archivos_vencidos` (solo service role) |
+| `conciliaciones` | `bancos` |
+| `anticipos` | `registros`, `retirados`, `retirados_imports`, enums `falta` / `observacion_1`, RPC `match_colaborador_retirado(_batch)` |
+| `comisiones` | `conceptos`, `periodo_valores`, `bases`, `reconocimientos`, `gasto_registrado`, `cierres`, RPC `guardar_cierre` |
+| `export_bancos` | `campos`, `campo_valores`, `plantillas` |
+| `private` | Helpers de RLS/triggers (`current_user_has_role`, `set_updated_at`, `normalize_colaborador_name*`). **No se expone** en la Data API |
+
+Desde código: `supabase.schema("comisiones").from("conceptos")`.
+
+**Agregar un proceso nuevo**:
+
+1. Migración con `create schema <proceso>;` y las tablas dentro. Copiar el bloque de privilegios de `20261029120000_schemas_por_proceso.sql` (usage + default privileges para `authenticated`/`service_role`, nunca `anon`).
+2. Habilitar RLS en cada tabla y usar `private.current_user_has_role('<rol>')` en las políticas.
+3. Agregar el schema en Supabase › Project Settings › Data API › **Exposed schemas**.
+4. Regenerar `src/types/supabase.ts` incluyendo el schema nuevo.
+
+**Storage**: todos los buckets son temporales. `/api/cron/limpiar-storage` (Vercel Cron diario, `CRON_SECRET`) borra lo que tenga más de 1 día en `conciliaciones-uploads`, `notas-credito-uploads` y `exports`. Los borrados se hacen con la Storage API; Supabase bloquea `delete from storage.objects`.
 
 ## 5. Tres clientes de Supabase
 
@@ -83,7 +107,7 @@ Plantilla en `.env.example`; se copia a `.env.local`. Validadas en `src/lib/env.
 |---|---|---|---|
 | `lib/supabase/server.ts` | anon key + cookies de sesión | Server Components, Server Actions, Route Handlers | Aplica con el usuario logueado |
 | `lib/supabase/client.ts` | anon key | Navegador | Aplica |
-| `lib/supabase/admin.ts` | **service role** (singleton cacheado) | Solo servidor: signed URLs, Storage, `user_roles`, import de retirados | Se salta RLS |
+| `lib/supabase/admin.ts` | **service role** (singleton cacheado) | Solo servidor: signed URLs, Storage, `core.user_roles`, import de retirados | Se salta RLS |
 
 ## 6. Patrón común: subir archivo y ejecutar un flujo n8n
 
@@ -135,7 +159,7 @@ Reglas compartidas (`src/lib/uploads.ts`):
 | Elemento | Dónde vive | Impacto en la documentación |
 |---|---|---|
 | Workflows de n8n (lógica real de conciliación por banco y de notas crédito) | Servidor n8n | Aquí solo se documenta el **contrato** (entrada/salida). Para documentar los pasos internos hay que exportar los JSON de los workflows. |
-| Migraciones de `anticipos_registros`, `conciliacion_bancos`, `user_roles`, función `current_user_has_role` y buckets/policies de Storage | Supabase (creadas fuera del repo) | Esquema inferido de `types/supabase.ts`. Conviene versionarlas. |
+| Migraciones originales de `anticipos.registros`, `conciliaciones.bancos`, `core.user_roles`, función `private.current_user_has_role` y buckets/policies de Storage | Supabase (creadas fuera del repo; desde `20261029120000` todo se versiona aquí) | Esquema inferido de `types/supabase.ts`. Conviene versionarlas. |
 | Reglas RLS de anticipos y conciliaciones | Supabase | No verificables desde el código. |
 
 ## 10. Hallazgos transversales

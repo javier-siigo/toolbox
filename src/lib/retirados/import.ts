@@ -85,7 +85,7 @@ async function upsertRetirados(
         observacion: r.observacion,
       }));
     const { error } = await supabase
-      .from("colaboradores_retirados")
+      .schema("anticipos").from("retirados")
       .upsert(batch, { onConflict: "cedula", ignoreDuplicates: false });
     if (error) {
       errors += batch.length;
@@ -135,7 +135,7 @@ export async function importRetiradosXlsx(
 
   const { upserted, errors } = await upsertRetirados(supabase, rows);
 
-  await supabase.from("colaboradores_retirados_imports").insert({
+  await supabase.schema("anticipos").from("retirados_imports").insert({
     file_name: file.name,
     file_size: file.size,
     total_rows: rows.length,

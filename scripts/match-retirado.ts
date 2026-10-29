@@ -137,7 +137,7 @@ async function fetchByCedula(
   cedula: number,
 ): Promise<MatchRow[]> {
   const { data, error } = await supabase
-    .from("colaboradores_retirados")
+    .schema("anticipos").from("retirados")
     .select("cedula, nombre, valor, observacion, fecha_reporte")
     .eq("cedula", cedula)
     .limit(1);
@@ -171,9 +171,9 @@ async function fetchByName(
   supabase: ReturnType<typeof createAdminClient>,
   name: string,
 ): Promise<MatchRow[]> {
-  const { data, error } = await supabase.rpc("match_colaborador_retirado", {
+  const { data, error } = await supabase.schema("anticipos").rpc("match_colaborador_retirado", {
     p_input: name,
-  } satisfies Database["public"]["Functions"]["match_colaborador_retirado"]["Args"]);
+  } satisfies Database["anticipos"]["Functions"]["match_colaborador_retirado"]["Args"]);
 
   if (error) {
     throw new Error(`Error al buscar por nombre: ${error.message}`);

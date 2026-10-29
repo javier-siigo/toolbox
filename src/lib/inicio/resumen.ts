@@ -63,7 +63,7 @@ async function intentar<T>(fn: () => Promise<T>): Promise<T | null> {
 async function resumenAnticipos(ahora: Date): Promise<ResumenAnticipos> {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("anticipos_registros")
+    .schema("anticipos").from("registros")
     .select("falta, observacion_1, fecha_rq, fecha_gestion");
   if (error) throw new Error(error.message);
   const filas = data ?? [];
@@ -95,16 +95,16 @@ async function resumenComisiones(ahora: Date): Promise<ResumenComisiones> {
   const supabase = await createClient();
   const periodo = shiftPeriodo(periodoActual(ahora), -1);
   const [valores, bases, reconocimientos, cierre] = await Promise.all([
-    supabase.from("comisiones_periodo_valores").select("valor").eq("periodo", periodo),
+    supabase.schema("comisiones").from("periodo_valores").select("valor").eq("periodo", periodo),
     supabase
-      .from("comisiones_bases")
+      .schema("comisiones").from("bases")
       .select("facturas, notas_credito")
       .eq("periodo", periodo),
     supabase
-      .from("comisiones_reconocimientos")
+      .schema("comisiones").from("reconocimientos")
       .select("cohorte", { count: "exact", head: true })
       .eq("periodo", periodo),
-    supabase.from("comisiones_cierres").select("periodo").eq("periodo", periodo).maybeSingle(),
+    supabase.schema("comisiones").from("cierres").select("periodo").eq("periodo", periodo).maybeSingle(),
   ]);
   for (const r of [valores, bases, reconocimientos, cierre]) {
     if (r.error) throw new Error(r.error.message);
@@ -128,7 +128,7 @@ async function resumenComisiones(ahora: Date): Promise<ResumenComisiones> {
 
 async function resumenBancos(paises: string[] | null): Promise<Record<string, number>> {
   const admin = createAdminClient();
-  let q = admin.from("conciliacion_bancos").select("pais").eq("activo", true);
+  let q = admin.schema("conciliaciones").from("bancos").select("pais").eq("activo", true);
   if (paises) q = q.in("pais", paises);
   const { data, error } = await q;
   if (error) throw new Error(error.message);

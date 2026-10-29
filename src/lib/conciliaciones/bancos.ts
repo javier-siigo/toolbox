@@ -37,7 +37,7 @@ export async function getBancosPorPais(
     async () => {
       const admin = createAdminClient();
       const { data, error } = await admin
-        .from("conciliacion_bancos")
+        .schema("conciliaciones").from("bancos")
         .select("slug, nombre, descripcion, es_particular")
         .eq("pais", pais)
         .eq("activo", true)
@@ -58,7 +58,7 @@ export async function getBancoPorSlug(
 ): Promise<BancoConciliacionCompleto | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("conciliacion_bancos")
+    .schema("conciliaciones").from("bancos")
     .select("slug, nombre, descripcion, es_particular, webhook_url, activo")
     .eq("pais", pais)
     .eq("slug", slug)

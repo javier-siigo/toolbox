@@ -13,7 +13,7 @@ export const ANTICIPOS_FALTA_LABELS = {
   revisar_con_harold: "Revisar con Harold",
   soportes: "Soportes",
 } as const satisfies Record<
-  Database["public"]["Enums"]["anticipos_falta_enum"],
+  Database["anticipos"]["Enums"]["falta"],
   string
 >;
 
@@ -25,13 +25,13 @@ export const ANTICIPOS_OBSERVACION_1_LABELS = {
   legalizado: "Legalizado",
   correo_al_lider: "Correo al líder",
 } as const satisfies Record<
-  Database["public"]["Enums"]["anticipos_observacion_1_enum"],
+  Database["anticipos"]["Enums"]["observacion_1"],
   string
 >;
 
-export type AnticipoFalta = Database["public"]["Enums"]["anticipos_falta_enum"];
+export type AnticipoFalta = Database["anticipos"]["Enums"]["falta"];
 export type AnticipoObservacion1 =
-  Database["public"]["Enums"]["anticipos_observacion_1_enum"];
+  Database["anticipos"]["Enums"]["observacion_1"];
 
 export const ANTICIPOS_FALTA_OPTIONS = Object.entries(ANTICIPOS_FALTA_LABELS).map(
   ([value, label]) => ({ value: value as AnticipoFalta, label }),

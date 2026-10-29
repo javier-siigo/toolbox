@@ -15,13 +15,13 @@ Cada mes el portal calcula, para **todas las cohortes vigentes**, el gasto a rec
 
 ## Acceso
 
-Ruta `/ingresos/calculo-comisiones`, área Ingresos. Los datos están protegidos por **RLS**: solo usuarios con rol `ingresos` o `admin` pueden leer/escribir las tablas `comisiones_*`. La página no llama a `requireProcesoAccess`; si Supabase falla o no hay permisos, sigue abriendo y muestra `errorDatos` (se puede leer el informe pero no calcular ni guardar).
+Ruta `/ingresos/calculo-comisiones`, área Ingresos. Los datos están protegidos por **RLS**: solo usuarios con rol `ingresos` o `admin` pueden leer/escribir las tablas `comisiones.*`. La página no llama a `requireProcesoAccess`; si Supabase falla o no hay permisos, sigue abriendo y muestra `errorDatos` (se puede leer el informe pero no calcular ni guardar).
 
 ## Conexiones
 
 | Conexión | Uso |
 |---|---|
-| Supabase BD (con sesión del usuario, RLS) | Lectura/escritura de las tablas `comisiones_*` y RPC `comisiones_guardar_cierre` |
+| Supabase BD (con sesión del usuario, RLS) | Lectura/escritura de las tablas `comisiones.*` y RPC `comisiones.guardar_cierre` |
 | n8n / APIs externas | **Ninguna**. Todo el procesamiento ocurre en Supabase y en el navegador |
 | Archivo Informe Diferido (`.xlsx`) | Subido manualmente por el usuario (proviene de la contabilidad/NetSuite según los comentarios del código); se procesa **localmente en un Web Worker** y **no se envía al servidor** |
 
@@ -31,8 +31,8 @@ La pestaña **Cierre del mes** tiene 4 pasos (con barra de progreso). Por defect
 
 | Paso | Qué se captura | Acción / tabla |
 |---|---|---|
-| 1. Comisiones causadas | Valor por concepto del período (Comisiones ventas, Incentivos, Bonificaciones, Ventas cruce…). Permite crear, renombrar, activar/desactivar conceptos y asignar su cuenta contable | `guardarValores` → `comisiones_periodo_valores`; `crearConcepto`/`actualizarConcepto` → `comisiones_conceptos` |
-| 2. Facturación del mes | Facturas y notas crédito de **F93** y **F94** del período (los valores se toman de NetSuite y se digitan) | `guardarBase` → `comisiones_bases` |
+| 1. Comisiones causadas | Valor por concepto del período (Comisiones ventas, Incentivos, Bonificaciones, Ventas cruce…). Permite crear, renombrar, activar/desactivar conceptos y asignar su cuenta contable | `guardarValores` → `comisiones.periodo_valores`; `crearConcepto`/`actualizarConcepto` → `comisiones.conceptos` |
+| 2. Facturación del mes | Facturas y notas crédito de **F93** y **F94** del período (los valores se toman de NetSuite y se digitan) | `guardarBase` → `comisiones.bases` |
 | 3. Informe diferido | Se arrastra/selecciona el `.xlsx` del mes. Se lee en el navegador con barra de progreso | Worker `informe-diferido.worker.ts` |
 | 4. Revisión y asientos | Resumen por cohorte, controles, asientos, tabla de documentos. Botones **Guardar cierre** y **Exportar Excel** | `guardarCierre` (RPC) · `construirExcel` |
 
@@ -66,7 +66,7 @@ El archivo mensual pesa **~170 MB comprimido (~800 MB de XML, 700 mil+ filas)**:
 
 Para cada cohorte (meses con comisiones hasta el período, más la del mes) y cada concepto, el gasto del mes sigue estas reglas **en orden**:
 
-1. **Gasto registrado**: si existe un valor contabilizado a mano para (cohorte, mes, concepto) en `comisiones_gasto_registrado`, ese es el gasto.
+1. **Gasto registrado**: si existe un valor contabilizado a mano para (cohorte, mes, concepto) en `comisiones.gasto_registrado`, ese es el gasto.
 2. **Fórmula**: `comisión × (ingreso del mes ÷ facturación neta de la cohorte)`.
 3. **Tope**: nunca se lleva al gasto más de lo causado (también para conceptos negativos, p. ej. reversiones de incentivos). El mes en que se alcanza el tope se reconoce **solo el saldo**.
 4. **Cierre por ingreso terminado**: si el informe muestra que las facturas de la cohorte ya no tienen ingreso por diferir (pendiente ≤ **$1.000**, `UMBRAL_PENDIENTE`) y aún queda comisión diferida, el saldo se amortiza ese mes como **ajuste de cierre**.
@@ -115,11 +115,11 @@ Los controles en **error impiden guardar** el cierre.
 
 ### Guardar cierre — `guardarCierre`
 
-Valida período `YYYY-MM`, que ninguna cohorte sea posterior al período y los importes. Llama a la RPC **`comisiones_guardar_cierre`** (`SECURITY INVOKER`, así que aplica RLS), que de forma **atómica**:
+Valida período `YYYY-MM`, que ninguna cohorte sea posterior al período y los importes. Llama a la RPC **`comisiones.guardar_cierre`** (`SECURITY INVOKER`, así que aplica RLS), que de forma **atómica**:
 
-1. Borra los `comisiones_reconocimientos` del período.
+1. Borra los `comisiones.reconocimientos` del período.
 2. Inserta los nuevos (fuente `informe`).
-3. Inserta/actualiza `comisiones_cierres` (resumen, `asientos` y `controles` en JSON).
+3. Inserta/actualiza `comisiones.cierres` (resumen, `asientos` y `controles` en JSON).
 
 > Del informe **no se guarda el detalle por factura**: solo el ingreso por cohorte/prefijo y el pendiente. El detalle se recalcula releyendo el archivo.
 
@@ -131,12 +131,12 @@ Borra el cierre y los reconocimientos de **fuente `informe`** de ese período; *
 
 | Tabla | Clave | Contenido |
 |---|---|---|
-| `comisiones_conceptos` | `id` | Catálogo editable: `nombre` (único sin mayúsculas/espacios), `cuenta` (4–12 dígitos), `activo`, `orden` |
-| `comisiones_periodo_valores` | `(periodo, concepto_id)` | Comisiones causadas por concepto en el período (`numeric(18,2)`) |
-| `comisiones_bases` | `(periodo, prefijo)` | Facturas y notas crédito F93/F94 emitidas en el mes |
-| `comisiones_reconocimientos` | `(cohorte, periodo, prefijo)` | Ingreso reconocido en `periodo` de la `cohorte`, `pendiente_ingreso`, `fuente` (`informe`/`excel`); `cohorte ≤ periodo` |
-| `comisiones_gasto_registrado` | `(cohorte, periodo, concepto_id)` | Gasto contabilizado a mano que difiere de la fórmula, con `motivo`. **Manda sobre el cálculo** |
-| `comisiones_cierres` | `periodo` (único) | Resumen del cierre: `gasto_mes`, `diferido_nuevo`, `saldo_diferido`, `asientos`, `controles`, archivo |
+| `comisiones.conceptos` | `id` | Catálogo editable: `nombre` (único sin mayúsculas/espacios), `cuenta` (4–12 dígitos), `activo`, `orden` |
+| `comisiones.periodo_valores` | `(periodo, concepto_id)` | Comisiones causadas por concepto en el período (`numeric(18,2)`) |
+| `comisiones.bases` | `(periodo, prefijo)` | Facturas y notas crédito F93/F94 emitidas en el mes |
+| `comisiones.reconocimientos` | `(cohorte, periodo, prefijo)` | Ingreso reconocido en `periodo` de la `cohorte`, `pendiente_ingreso`, `fuente` (`informe`/`excel`); `cohorte ≤ periodo` |
+| `comisiones.gasto_registrado` | `(cohorte, periodo, concepto_id)` | Gasto contabilizado a mano que difiere de la fórmula, con `motivo`. **Manda sobre el cálculo** |
+| `comisiones.cierres` | `periodo` (único) | Resumen del cierre: `gasto_mes`, `diferido_nuevo`, `saldo_diferido`, `asientos`, `controles`, archivo |
 
 `comisiones_ejecuciones` (modelo anterior de "pool global") fue **eliminada**.
 
@@ -164,7 +164,7 @@ La migración `20261016150100_comisiones_historico.sql` carga 2025 y 2026 hasta 
 
 ## Hallazgos
 
-1. **No hay interfaz para `comisiones_gasto_registrado`**: los ajustes manuales se cargan por SQL/migración.
+1. **No hay interfaz para `comisiones.gasto_registrado`**: los ajustes manuales se cargan por SQL/migración.
 2. Los valores de comisiones y la facturación F93/F94 se **digitan a mano**; no hay integración con NetSuite.
 3. El informe se relee cada vez (no se guarda el detalle); si cambia el archivo, el resultado cambia.
 4. `eliminarCierre` no es atómico (borra cierre y luego reconocimientos).

@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_PATHS = new Set<string>(["/login"]);
-const PUBLIC_PREFIXES = ["/api/public", "/_next", "/favicon", "/icons"];
+// /api/cron se autentica con CRON_SECRET dentro de la ruta.
+const PUBLIC_PREFIXES = ["/api/public", "/api/cron", "/_next", "/favicon", "/icons"];
 const SEEN_COOKIE = "siico_seen";
 const SEEN_INTERVAL_SECONDS = 5 * 60;
 
@@ -76,7 +77,7 @@ export async function proxy(request: NextRequest) {
   // cada request; la función además ignora llamadas a menos de 5 min.
   if (hasSession && !request.cookies.has(SEEN_COOKIE)) {
     try {
-      await supabase.rpc("touch_last_seen");
+      await supabase.schema("core").rpc("touch_last_seen");
     } catch {
       // No bloquear la navegación por un registro de actividad.
     }

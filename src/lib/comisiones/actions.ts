@@ -62,20 +62,20 @@ export async function getComisionesData(): Promise<ComisionesData> {
 
   const [conceptosRes, valoresRes, basesRes, reconRes, registradosRes, cierresRes] = await Promise.all([
     supabase
-      .from("comisiones_conceptos")
+      .schema("comisiones").from("conceptos")
       .select("id, nombre, cuenta, activo, orden")
       .order("orden")
       .order("created_at"),
-    supabase.from("comisiones_periodo_valores").select("periodo, concepto_id, valor"),
-    supabase.from("comisiones_bases").select("periodo, prefijo, facturas, notas_credito"),
+    supabase.schema("comisiones").from("periodo_valores").select("periodo, concepto_id, valor"),
+    supabase.schema("comisiones").from("bases").select("periodo, prefijo, facturas, notas_credito"),
     supabase
-      .from("comisiones_reconocimientos")
+      .schema("comisiones").from("reconocimientos")
       .select("cohorte, periodo, prefijo, ingreso, pendiente_ingreso, fuente"),
     supabase
-      .from("comisiones_gasto_registrado")
+      .schema("comisiones").from("gasto_registrado")
       .select("cohorte, periodo, concepto_id, gasto, motivo"),
     supabase
-      .from("comisiones_cierres")
+      .schema("comisiones").from("cierres")
       .select("*")
       .order("periodo", { ascending: false }),
   ]);
@@ -164,14 +164,14 @@ export async function crearConcepto(nombre: string): Promise<ActionResult<Concep
   if (!user) return { ok: false, error: SESION_EXPIRADA };
 
   const { data: last } = await supabase
-    .from("comisiones_conceptos")
+    .schema("comisiones").from("conceptos")
     .select("orden")
     .order("orden", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   const { data, error } = await supabase
-    .from("comisiones_conceptos")
+    .schema("comisiones").from("conceptos")
     .insert({ nombre: parsed.data, orden: (last?.orden ?? 0) + 1 })
     .select("id, nombre, cuenta, activo, orden")
     .single();
@@ -207,7 +207,7 @@ export async function actualizarConcepto(
   const { supabase, user } = await authed();
   if (!user) return { ok: false, error: SESION_EXPIRADA };
 
-  const { error } = await supabase.from("comisiones_conceptos").update(update).eq("id", id);
+  const { error } = await supabase.schema("comisiones").from("conceptos").update(update).eq("id", id);
   if (error) return { ok: false, error: dbError(error.message, error.code) };
 
   revalidatePath(PATH);
@@ -230,7 +230,7 @@ export async function guardarValores(
   if (!user) return { ok: false, error: SESION_EXPIRADA };
 
   const now = new Date().toISOString();
-  const { error } = await supabase.from("comisiones_periodo_valores").upsert(
+  const { error } = await supabase.schema("comisiones").from("periodo_valores").upsert(
     valores.map((v) => ({
       periodo: p.data,
       concepto_id: v.conceptoId,
@@ -261,7 +261,7 @@ export async function guardarBase(base: BasePeriodo): Promise<ActionResult> {
   const { supabase, user } = await authed();
   if (!user) return { ok: false, error: SESION_EXPIRADA };
 
-  const { error } = await supabase.from("comisiones_bases").upsert(
+  const { error } = await supabase.schema("comisiones").from("bases").upsert(
     {
       periodo: p.data,
       prefijo: pre.data,
@@ -318,7 +318,7 @@ export async function guardarCierre(input: GuardarCierreInput): Promise<ActionRe
   const { supabase, user } = await authed();
   if (!user) return { ok: false, error: SESION_EXPIRADA };
 
-  const { error } = await supabase.rpc("comisiones_guardar_cierre", {
+  const { error } = await supabase.schema("comisiones").rpc("guardar_cierre", {
     p_periodo: p.data,
     p_reconocimientos: recon.data.map((r) => ({
       cohorte: r.cohorte,
@@ -349,13 +349,13 @@ export async function eliminarCierre(periodo: string): Promise<ActionResult> {
   const { supabase, user } = await authed();
   if (!user) return { ok: false, error: SESION_EXPIRADA };
 
-  const { error } = await supabase.from("comisiones_cierres").delete().eq("periodo", p.data);
+  const { error } = await supabase.schema("comisiones").from("cierres").delete().eq("periodo", p.data);
   if (error) return { ok: false, error: dbError(error.message, error.code) };
 
   // El ingreso leído del informe para ese mes se va con el cierre; el
   // histórico cargado desde el Excel se conserva.
   const { error: e2 } = await supabase
-    .from("comisiones_reconocimientos")
+    .schema("comisiones").from("reconocimientos")
     .delete()
     .eq("periodo", p.data)
     .eq("fuente", "informe");

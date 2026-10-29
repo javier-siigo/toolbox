@@ -36,7 +36,7 @@ const fetchRoles = unstable_cache(
   async (userId: string): Promise<UserRolesInfo> => {
     const admin = createAdminClient();
     const { data, error } = await admin
-      .from("user_roles")
+      .schema("core").from("user_roles")
       .select("roles, paises")
       .eq("user_id", userId)
       .maybeSingle();

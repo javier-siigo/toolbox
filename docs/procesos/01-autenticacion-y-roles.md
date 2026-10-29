@@ -5,7 +5,7 @@
 Controla quién entra al portal y a qué procesos accede. Tiene tres piezas:
 
 1. **Login/logout** con correo y contraseña (Supabase Auth).
-2. **Roles y países** por usuario (tabla `user_roles`), que determinan qué áreas y procesos ve cada persona.
+2. **Roles y países** por usuario (tabla `core.user_roles`), que determinan qué áreas y procesos ve cada persona.
 3. **Pantalla de administración** (`/admin/usuarios`) para asignar roles.
 
 ## Conexiones
@@ -13,7 +13,7 @@ Controla quién entra al portal y a qué procesos accede. Tiene tres piezas:
 | Conexión | Detalle |
 |---|---|
 | Supabase Auth | `signInWithPassword`, `signOut`, `getClaims()`, `auth.admin.listUsers` |
-| Supabase BD | Tabla `user_roles` (vía cliente admin) |
+| Supabase BD | Tabla `core.user_roles` (vía cliente admin) |
 | n8n / APIs externas | Ninguna |
 
 ## Login
@@ -55,7 +55,7 @@ El layout `(app)/layout.tsx` repite la comprobación, arma el nombre visible (`u
 
 Roles válidos: `admin`, `conciliaciones`, `ingresos`. Países válidos: `CO`, `MX`, `UY`, `CL`, `EC`.
 
-Se leen de `user_roles` (`roles text[]`, `paises text[]`) con el cliente admin y se **cachean 60 s** (`unstable_cache`, tag `user-roles`). Si el usuario no tiene fila, no tiene ningún rol.
+Se leen de `core.user_roles` (`roles text[]`, `paises text[]`) con el cliente admin y se **cachean 60 s** (`unstable_cache`, tag `user-roles`). Si el usuario no tiene fila, no tiene ningún rol.
 
 ### Matriz de acceso
 
@@ -85,7 +85,7 @@ Define las áreas (`conciliaciones`, `ingresos`, `admin`) y sus procesos. **Agre
 
 **Archivos:** `src/lib/admin/users.ts`, `src/app/(app)/admin/usuarios/{page,users-table}.tsx`
 
-- `listUsersWithRoles()`: solo admins. Une `user_roles` con todos los usuarios de `auth.users` (paginando de a 200 con `auth.admin.listUsers`). Los registros de `user_roles` sin usuario en Auth aparecen como **"(usuario huérfano)"**. Orden alfabético por correo. Incluye `last_sign_in_at`.
+- `listUsersWithRoles()`: solo admins. Une `core.user_roles` con todos los usuarios de `auth.users` (paginando de a 200 con `auth.admin.listUsers`). Los registros de `core.user_roles` sin usuario en Auth aparecen como **"(usuario huérfano)"**. Orden alfabético por correo. Incluye `last_sign_in_at`.
 - `updateUserRoles({userId, roles, paises})`: solo admins. Valida con zod (UUID, roles y países del catálogo). **Los países solo se guardan si el rol `conciliaciones` está marcado**; de lo contrario se guardan vacíos. Hace `upsert` por `user_id` y llama `revalidateTag("user-roles")` para que el cambio sea inmediato.
 - `requireCurrentAdmin()`: sin sesión → `/login`; sin rol admin → `/`.
 
@@ -93,7 +93,7 @@ Define las áreas (`conciliaciones`, `ingresos`, `admin`) y sus procesos. **Agre
 
 | Tabla | Columnas | Notas |
 |---|---|---|
-| `user_roles` | `user_id` (PK), `roles text[]`, `paises text[]`, `updated_at` | Escrita solo con service role |
+| `core.user_roles` | `user_id` (PK), `roles text[]`, `paises text[]`, `updated_at` | Escrita solo con service role |
 
 La función SQL `public.current_user_has_role(text)` (usada por las políticas RLS de comisiones) **no está en las migraciones del repo**.
 
