@@ -68,6 +68,7 @@ export type Database = {
           nombre: string
           nombre_normalizado: string | null
           observacion: string | null
+          tokens: string[] | null
           valor: number | null
         }
         Insert: {
