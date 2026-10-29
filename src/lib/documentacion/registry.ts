@@ -65,6 +65,13 @@ export const DOCUMENTOS: readonly DocumentoMeta[] = [
     descripcion: "Carga del reporte de retirados, reglas de importación y búsqueda manual.",
     requiere: [PROCESOS.GESTION_ANTICIPOS],
   },
+  {
+    slug: "servicios-publicos",
+    archivo: "07-servicios-publicos.md",
+    titulo: "Servicios públicos",
+    descripcion: "Seguimiento de recibos: estados, fechas de corte, alertas, pagos y soportes.",
+    requiere: [PROCESOS.SERVICIOS_PUBLICOS],
+  },
 ];
 
 export function findDocumento(slug: string): DocumentoMeta | undefined {

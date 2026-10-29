@@ -6,7 +6,7 @@ Registro y seguimiento de **anticipos pendientes de legalizar**, por colaborador
 
 ## Acceso
 
-Ruta `/ingresos/gestion-anticipos`, proceso `ingresos.gestion-anticipos`. La página exige acceso (`requireAcceso`); leer pide `ver` y crear, editar, legalizar, borrar o importar piden `usar`, tanto en las server actions como en RLS (`20261029160000_permisos_por_proceso.sql`). Con `ver` la tabla se muestra sin acciones.
+Ruta `/ingresos-egresos/gestion-anticipos`, proceso `ingresos.gestion-anticipos`. La página exige acceso (`requireAcceso`); leer pide `ver` y crear, editar, legalizar, borrar o importar piden `usar`, tanto en las server actions como en RLS (`20261029160000_permisos_por_proceso.sql`). Con `ver` la tabla se muestra sin acciones.
 
 ## Conexiones
 
@@ -55,7 +55,7 @@ Existe una restricción de **unicidad** por colaborador + requerimiento (el cód
 
 ## Operaciones (Server Actions, `src/lib/anticipos/actions.ts`)
 
-Todas exigen sesión (`auth.getUser`) y validan con zod (`schema.ts`). Tras escribir, `revalidatePath("/ingresos/gestion-anticipos")`.
+Todas exigen sesión (`auth.getUser`) y validan con zod (`schema.ts`). Tras escribir, `revalidatePath("/ingresos-egresos/gestion-anticipos")`.
 
 | Acción | Qué hace |
 |---|---|
@@ -99,7 +99,7 @@ El resultado incluye `tokens_comunes` y `tokens_extra` para que el usuario pueda
 
 ## Archivos fuente
 
-- Página: `src/app/(app)/ingresos/gestion-anticipos/page.tsx`
+- Página: `src/app/(app)/ingresos-egresos/gestion-anticipos/page.tsx`
 - UI: `src/components/anticipos/` (`anticipos-page`, `anticipos-data-table`, `columns`, `anticipos-form`, `anticipos-edit-sheet`, `anticipos-delete-dialog`, `data-table-features`, `truncated-text`, `importar-retirados/`)
 - Lógica: `src/lib/anticipos/{actions,schema,format}.ts`
 - SQL: `supabase/migrations/20261016120000_match_colaborador_retirado.sql`, `…130000_match_colaborador_retirado_batch.sql`, `20261029150000_retirados_tokens.sql`, `20261029190000_registros_retiro_materializado.sql`

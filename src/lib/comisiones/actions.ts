@@ -21,7 +21,7 @@ import {
   type ValorPeriodo,
 } from "./types";
 
-const PATH = "/ingresos/calculo-comisiones";
+const PATH = "/ingresos-egresos/calculo-comisiones";
 
 const periodoSchema = z
   .string()

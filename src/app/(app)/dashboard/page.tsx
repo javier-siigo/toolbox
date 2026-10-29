@@ -51,7 +51,7 @@ function itemsAtencion(r: ResumenInicio): ItemAtencion[] {
       cifra: { tipo: "numero", valor: a.atrasados },
       titulo: `${plural(a.atrasados, "Anticipo", "Anticipos")} sin gestión hace más de ${DIAS_ATRASO} días`,
       detalle: `Gestión de anticipos · de ${a.pendientes} pendientes`,
-      accion: { label: "Ver anticipos", href: "/ingresos/gestion-anticipos" },
+      accion: { label: "Ver anticipos", href: "/ingresos-egresos/gestion-anticipos" },
     });
   }
   if (r.anticipos && r.anticipos.devoluciones > 0) {
@@ -62,7 +62,7 @@ function itemsAtencion(r: ResumenInicio): ItemAtencion[] {
       cifra: { tipo: "numero", valor: n },
       titulo: `${plural(n, "Devolución", "Devoluciones")} de anticipo por gestionar`,
       detalle: "Gestión de anticipos · falta: devolución",
-      accion: { label: "Ver anticipos", href: "/ingresos/gestion-anticipos" },
+      accion: { label: "Ver anticipos", href: "/ingresos-egresos/gestion-anticipos" },
     });
   }
   const paso = r.comisiones?.pasoActual ?? null;
@@ -75,7 +75,7 @@ function itemsAtencion(r: ResumenInicio): ItemAtencion[] {
       cifra: { tipo: "pasos", hechos: c.hechos },
       titulo: `Cierre de comisiones de ${mes} en el paso ${paso} de 4`,
       detalle: `Siguiente: ${PASOS_CIERRE[paso - 1]}`,
-      accion: { label: "Continuar", href: "/ingresos/calculo-comisiones" },
+      accion: { label: "Continuar", href: "/ingresos-egresos/calculo-comisiones" },
     });
   }
   if (r.admin && r.admin.sinPermisos > 0) {
@@ -140,10 +140,10 @@ export default async function DashboardPage() {
   // Inicio no es un proceso: basta la sesión; cada bloque se filtra por permisos.
   const sesion = await requireSesion();
   const { permisos } = sesion;
-  // Ingresos primero: es donde viven las cifras y los pendientes medibles.
+  // Ingresos y egresos primero: es donde viven las cifras y los pendientes medibles.
   const areas = filterAreas(permisos, AREAS)
     .filter((a) => !a.enMenuUsuario)
-    .sort((a, b) => Number(b.slug === "ingresos") - Number(a.slug === "ingresos"));
+    .sort((a, b) => Number(b.slug === "ingresos-egresos") - Number(a.slug === "ingresos-egresos"));
 
   if (areas.length === 0 && !permisos.esAdmin) {
     return (

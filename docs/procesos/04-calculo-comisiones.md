@@ -15,7 +15,7 @@ Cada mes el portal calcula, para **todas las cohortes vigentes**, el gasto a rec
 
 ## Acceso
 
-Ruta `/ingresos/calculo-comisiones`, área Ingresos. Proceso `ingresos.calculo-comisiones`: la página exige acceso (`requireAcceso`); leer pide `ver` y cualquier escritura (conceptos, valores, facturación, cierres) pide `usar`, en las server actions y en RLS. Con `ver` los paneles editables quedan deshabilitados y no se puede guardar ni eliminar cierres; sí cargar el informe y exportar. Si Supabase falla, la página sigue abriendo y muestra `errorDatos`.
+Ruta `/ingresos-egresos/calculo-comisiones`, área Ingresos. Proceso `ingresos.calculo-comisiones`: la página exige acceso (`requireAcceso`); leer pide `ver` y cualquier escritura (conceptos, valores, facturación, cierres) pide `usar`, en las server actions y en RLS. Con `ver` los paneles editables quedan deshabilitados y no se puede guardar ni eliminar cierres; sí cargar el informe y exportar. Si Supabase falla, la página sigue abriendo y muestra `errorDatos`.
 
 ## Conexiones
 
@@ -157,7 +157,7 @@ La migración `20261016150100_comisiones_historico.sql` carga 2025 y 2026 hasta 
 
 ## Archivos fuente
 
-- Página: `src/app/(app)/ingresos/calculo-comisiones/page.tsx`
+- Página: `src/app/(app)/ingresos-egresos/calculo-comisiones/page.tsx`
 - UI: `src/components/calculo-comisiones/` (`calculo-comisiones-page`, `base-panel`, `conceptos-panel`, `informe-panel`, `revision-panel`, `seguimiento-tab`, `documentos-table`, `periodo-picker`, `paso`, `progress-bar`, `use-informe-diferido.ts`)
 - Dominio: `src/lib/comisiones/` (`types`, `calculo`, `controles`, `actions`, `informe-diferido`, `informe-diferido.worker`, `exportar`, `xlsx-writer`)
 - SQL: `supabase/migrations/20261016140000_comisiones.sql`, `…150000_comisiones_cohortes.sql`, `…150100_comisiones_historico.sql`

@@ -17,6 +17,7 @@ export const PROCESOS = {
   NOTAS_CREDITO: "ingresos.notas-credito",
   CALCULO_COMISIONES: "ingresos.calculo-comisiones",
   EXPORT_BANCOS: "ingresos.export-bancos",
+  SERVICIOS_PUBLICOS: "egresos.servicios-publicos",
 } as const;
 
 export type ProcesoId = (typeof PROCESOS)[keyof typeof PROCESOS];

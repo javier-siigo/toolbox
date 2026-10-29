@@ -752,6 +752,168 @@ export type Database = {
       [_ in never]: never
     }
   }
+  servicios_publicos: {
+    Tables: {
+      recibos: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          estado: string
+          fecha_corte: string | null
+          fecha_pago: string | null
+          fecha_recibido: string | null
+          fecha_registro: string | null
+          id: string
+          mes: string
+          observaciones: string | null
+          referencia: string | null
+          servicio_id: string
+          soporte_nombre: string | null
+          soporte_path: string | null
+          soporte_subido_at: string | null
+          updated_at: string
+          updated_by: string | null
+          valor: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          fecha_corte?: string | null
+          fecha_pago?: string | null
+          fecha_recibido?: string | null
+          fecha_registro?: string | null
+          id?: string
+          mes: string
+          observaciones?: string | null
+          referencia?: string | null
+          servicio_id: string
+          soporte_nombre?: string | null
+          soporte_path?: string | null
+          soporte_subido_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          valor?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          fecha_corte?: string | null
+          fecha_pago?: string | null
+          fecha_recibido?: string | null
+          fecha_registro?: string | null
+          id?: string
+          mes?: string
+          observaciones?: string | null
+          referencia?: string | null
+          servicio_id?: string
+          soporte_nombre?: string | null
+          soporte_path?: string | null
+          soporte_subido_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recibos_servicio_id_fkey"
+            columns: ["servicio_id"]
+            isOneToOne: false
+            referencedRelation: "servicios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recibos_historial: {
+        Row: {
+          at: string
+          detalle: string
+          evento: string
+          id: number
+          recibo_id: string
+          usuario: string | null
+        }
+        Insert: {
+          at?: string
+          detalle: string
+          evento: string
+          id?: never
+          recibo_id: string
+          usuario?: string | null
+        }
+        Update: {
+          at?: string
+          detalle?: string
+          evento?: string
+          id?: never
+          recibo_id?: string
+          usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recibos_historial_recibo_id_fkey"
+            columns: ["recibo_id"]
+            isOneToOne: false
+            referencedRelation: "recibos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      servicios: {
+        Row: {
+          activo: boolean
+          created_at: string
+          created_by: string | null
+          dia_corte: number | null
+          id: string
+          notas: string | null
+          proveedor: string
+          referencia: string | null
+          servicio: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string
+          created_by?: string | null
+          dia_corte?: number | null
+          id?: string
+          notas?: string | null
+          proveedor: string
+          referencia?: string | null
+          servicio: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string
+          created_by?: string | null
+          dia_corte?: number | null
+          id?: string
+          notas?: string | null
+          proveedor?: string
+          referencia?: string | null
+          servicio?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      preparar_mes: { Args: { p_mes: string }; Returns: number }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       [_ in never]: never
@@ -922,6 +1084,9 @@ export const Constants = {
     },
   },
   export_bancos: {
+    Enums: {},
+  },
+  servicios_publicos: {
     Enums: {},
   },
   public: {

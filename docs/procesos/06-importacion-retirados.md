@@ -6,7 +6,7 @@ Mantiene la tabla **`anticipos.retirados`** a partir del **reporte de Contabilid
 
 | Vía | Quién | Cómo |
 |---|---|---|
-| Web | Roles `ingresos` o `admin` | Hoja lateral "Importar excolaboradores" en `/ingresos/gestion-anticipos` |
+| Web | Roles `ingresos` o `admin` | Hoja lateral "Importar excolaboradores" en `/ingresos-egresos/gestion-anticipos` |
 | CLI de importación | Desarrollador/administrador | `npm run import:retirados -- /ruta/archivo.xlsx` |
 | CLI de búsqueda | Desarrollador/administrador | `npm run match:retirado -- "Juan Lopez"` |
 
@@ -46,7 +46,7 @@ Las filas sin cédula numérica positiva o sin nombre se descartan en silencio.
 
 ### Permisos (versión web)
 
-`importarRetiradosAction` (`src/lib/retirados/actions.ts`): exige nivel `usar` en Gestión de anticipos (`autorizar(PROCESOS.GESTION_ANTICIPOS, "usar")`); la escritura se hace con el **cliente admin** (se salta RLS). Al terminar revalida `/ingresos/gestion-anticipos`.
+`importarRetiradosAction` (`src/lib/retirados/actions.ts`): exige nivel `usar` en Gestión de anticipos (`autorizar(PROCESOS.GESTION_ANTICIPOS, "usar")`); la escritura se hace con el **cliente admin** (se salta RLS). Al terminar revalida `/ingresos-egresos/gestion-anticipos`.
 
 ### Script CLI
 

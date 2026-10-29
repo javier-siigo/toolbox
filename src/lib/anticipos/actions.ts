@@ -127,7 +127,7 @@ export async function createAnticipo(
     return { error: `No se pudo guardar el registro: ${error.message}` };
   }
 
-  revalidatePath("/ingresos/gestion-anticipos");
+  revalidatePath("/ingresos-egresos/gestion-anticipos");
   return { ok: true };
 }
 
@@ -200,7 +200,7 @@ export async function updateAnticipo(
     return { error: `No se pudo actualizar el registro: ${error.message}` };
   }
 
-  revalidatePath("/ingresos/gestion-anticipos");
+  revalidatePath("/ingresos-egresos/gestion-anticipos");
   return { ok: true };
 }
 
@@ -230,7 +230,7 @@ export async function deleteAnticipo(
     return { error: `No se pudo eliminar el registro: ${error.message}` };
   }
 
-  revalidatePath("/ingresos/gestion-anticipos");
+  revalidatePath("/ingresos-egresos/gestion-anticipos");
   return { ok: true };
 }
 
@@ -264,6 +264,6 @@ export async function legalizeAnticipo(
     return { error: `No se pudo legalizar el registro: ${error.message}` };
   }
 
-  revalidatePath("/ingresos/gestion-anticipos");
+  revalidatePath("/ingresos-egresos/gestion-anticipos");
   return { ok: true };
 }

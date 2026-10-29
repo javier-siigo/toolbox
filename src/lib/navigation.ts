@@ -1,14 +1,16 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeftRight,
   BookOpen,
   Calculator,
+  FileChartColumn,
   FileText,
   HandCoins,
   Landmark,
   Receipt,
   Scale,
   Settings,
-  TrendingUp,
+  Zap,
 } from "lucide-react";
 
 import { PROCESOS, type ProcesoId } from "@/lib/auth/permisos-shared";
@@ -86,10 +88,10 @@ export const AREAS: Area[] = [
     ],
   },
   {
-    slug: "ingresos",
-    label: "Ingresos",
-    description: "Procesos asociados al ciclo de ingresos.",
-    icon: TrendingUp,
+    slug: "ingresos-egresos",
+    label: "Ingresos y egresos",
+    description: "Procesos del ciclo de ingresos y de pagos.",
+    icon: ArrowLeftRight,
     procesos: [
       {
         id: PROCESOS.GESTION_ANTICIPOS,
@@ -114,6 +116,22 @@ export const AREAS: Area[] = [
           "Procesamiento y control mensual del reconocimiento de comisiones.",
         icon: Calculator,
       },
+      {
+        id: PROCESOS.SERVICIOS_PUBLICOS,
+        slug: "servicios-publicos",
+        label: "Servicios públicos",
+        description:
+          "Seguimiento de recibos de servicios públicos: factura, registro, pago y soporte.",
+        icon: Zap,
+      },
+    ],
+  },
+  {
+    slug: "reportes",
+    label: "Reportes",
+    description: "Extracciones y reportes contables para auditoría.",
+    icon: FileChartColumn,
+    procesos: [
       {
         id: PROCESOS.EXPORT_BANCOS,
         slug: "export-bancos",

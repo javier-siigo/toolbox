@@ -52,14 +52,17 @@ supabase/migrations/                  Migraciones SQL (ver "Base de datos: un sc
 
 ## 3. Mapa de procesos
 
+Áreas del menú (`src/lib/navigation.ts`): **Conciliaciones**, **Ingresos y egresos** (`/ingresos-egresos/…`) y **Reportes** (`/reportes/…`). Las rutas anteriores `/ingresos/…` y `/egresos/…` redirigen a las nuevas (`next.config.ts`). Los ids de proceso no se renombraron al mover áreas (`ingresos.export-bancos` vive en Reportes): son la llave de `core.permisos` y de RLS; el área solo se refleja en la columna informativa `core.procesos.area`.
+
 | Proceso | Ruta | Rol requerido | n8n | Tablas / buckets Supabase | Doc |
 |---|---|---|---|---|---|
 | Conciliación Colombia / Uruguay / Ecuador | `/conciliaciones/{colombia,uruguay,ecuador}` | `conciliaciones` + país | Sí (webhook por banco) | `conciliaciones.bancos`, bucket `conciliaciones-uploads` | [02](02-conciliaciones.md) |
 | Conciliación Chile / México | `/conciliaciones/{chile,mexico}` | `conciliaciones` + país | No (placeholder) | — | [02](02-conciliaciones.md) |
-| Notas crédito | `/ingresos/notas-credito` | `ingresos` | Sí (webhook fijo) | bucket `notas-credito-uploads` | [03](03-notas-credito.md) |
-| Cálculo de comisiones | `/ingresos/calculo-comisiones` | `ingresos` | No | `comisiones.*` (6 tablas + RPC) | [04](04-calculo-comisiones.md) |
-| Gestión y legalización de anticipos | `/ingresos/gestion-anticipos` | `ingresos` | No | `anticipos.registros`, `anticipos.retirados` | [05](05-gestion-anticipos.md) |
+| Notas crédito | `/ingresos-egresos/notas-credito` | `ingresos` | Sí (webhook fijo) | bucket `notas-credito-uploads` | [03](03-notas-credito.md) |
+| Cálculo de comisiones | `/ingresos-egresos/calculo-comisiones` | `ingresos` | No | `comisiones.*` (6 tablas + RPC) | [04](04-calculo-comisiones.md) |
+| Gestión y legalización de anticipos | `/ingresos-egresos/gestion-anticipos` | `ingresos` | No | `anticipos.registros`, `anticipos.retirados` | [05](05-gestion-anticipos.md) |
 | Importación de excolaboradores | Sheet dentro de anticipos + CLI | `ingresos` o `admin` | No | `anticipos.retirados`, `anticipos.retirados_imports` | [06](06-importacion-retirados.md) |
+| Servicios públicos | `/ingresos-egresos/servicios-publicos` | `egresos.servicios-publicos` | No | `servicios_publicos.*`, bucket `servicios-publicos-soportes` | [07](07-servicios-publicos.md) |
 | Autenticación, permisos y usuarios | `/login`, `/admin/usuarios` | admin (usuarios) | No | `core.procesos`, `core.permisos`, `core.usuarios`, `auth.users` | [01](01-autenticacion-y-roles.md) |
 
 ## 4. Variables de entorno
@@ -88,6 +91,7 @@ Plantilla en `.env.example`; se copia a `.env.local`. Validadas en `src/lib/env.
 | `anticipos` | `registros`, `retirados`, `retirados_imports`, enums `falta` / `observacion_1`, RPC `match_colaborador_retirado(_batch)`; el cruce se guarda en `registros` por triggers |
 | `comisiones` | `conceptos`, `periodo_valores`, `bases`, `reconocimientos`, `gasto_registrado`, `cierres`, RPC `guardar_cierre` |
 | `export_bancos` | `campos`, `campo_valores`, `plantillas` |
+| `servicios_publicos` | `servicios`, `recibos`, `recibos_historial`, RPC `preparar_mes` |
 | `private` | Helpers de RLS/triggers (`tiene_acceso`, `set_updated_at`, `normalize_colaborador_name*`). **No se expone** en la Data API |
 
 Desde código: `supabase.schema("comisiones").from("conceptos")`.
@@ -99,7 +103,7 @@ Desde código: `supabase.schema("comisiones").from("conceptos")`.
 3. Agregar el schema en Supabase › Project Settings › Data API › **Exposed schemas**.
 4. Regenerar `src/types/supabase.ts` incluyendo el schema nuevo.
 
-**Storage**: todos los buckets son temporales. `/api/cron/limpiar-storage` (Vercel Cron diario, `CRON_SECRET`) borra lo que tenga más de 1 día en `conciliaciones-uploads`, `notas-credito-uploads` y `exports`. Los borrados se hacen con la Storage API; Supabase bloquea `delete from storage.objects`.
+**Storage**: los buckets de trabajo son temporales; la excepción es `servicios-publicos-soportes` (soportes de pago, permanentes y fuera de la limpieza). `/api/cron/limpiar-storage` (Vercel Cron diario, `CRON_SECRET`) borra lo que tenga más de 1 día en `conciliaciones-uploads`, `notas-credito-uploads` y `exports`. Los borrados se hacen con la Storage API; Supabase bloquea `delete from storage.objects`.
 
 ## 5. Tres clientes de Supabase
 

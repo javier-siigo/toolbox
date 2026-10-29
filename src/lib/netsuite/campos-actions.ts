@@ -21,7 +21,7 @@ import { NetSuiteError } from "./client";
 import { filtrosSchema, parseFiltrosGuardados, type Filtro } from "./filtros";
 import { descubrirCampos } from "./descubrir";
 
-const PATH = "/ingresos/export-bancos";
+const PATH = "/reportes/export-bancos";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }

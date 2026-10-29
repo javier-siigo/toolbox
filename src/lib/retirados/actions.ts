@@ -35,7 +35,7 @@ export async function importarRetiradosAction(
     return { error: result.error };
   }
 
-  revalidatePath("/ingresos/gestion-anticipos");
+  revalidatePath("/ingresos-egresos/gestion-anticipos");
   revalidatePath("/admin/importar-retirados");
 
   return {

@@ -6,7 +6,7 @@ El usuario sube un archivo de notas crédito; el portal lo envía a un **workflo
 
 ## Acceso
 
-Ruta `/ingresos/notas-credito`, área **Ingresos**, proceso `ingresos.notas-credito`. La página exige acceso (`requireAcceso`) y las dos APIs exigen nivel `usar`; con `ver` la página muestra el aviso de solo lectura en lugar de la carga.
+Ruta `/ingresos-egresos/notas-credito`, área **Ingresos**, proceso `ingresos.notas-credito`. La página exige acceso (`requireAcceso`) y las dos APIs exigen nivel `usar`; con `ver` la página muestra el aviso de solo lectura en lugar de la carga.
 
 ## Flujo del usuario
 
@@ -90,7 +90,7 @@ Mismos códigos que conciliaciones (`unauthorized`, `bad_request`, `missing_file
 
 ## Archivos fuente
 
-- Página: `src/app/(app)/ingresos/notas-credito/page.tsx`
+- Página: `src/app/(app)/ingresos-egresos/notas-credito/page.tsx`
 - UI: `src/components/notas-credito/` (`notas-credito-page`, `upload-card`, `result-card`, `history-list`, `types`)
 - API: `src/app/api/notas-credito/{upload-url,conciliar}/route.ts`
 - Lógica: `src/lib/notas-credito/{conciliar,highlight-differences}.ts`, `src/lib/uploads.ts`, `src/types/xlsx-populate*.ts`
