@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          es_retirado: boolean
           falta: Database["anticipos"]["Enums"]["falta"]
           fecha_gestion: string | null
           fecha_rq: string
@@ -27,6 +28,10 @@ export type Database = {
           observacion_1: Database["anticipos"]["Enums"]["observacion_1"]
           observacion_2: string | null
           requerimiento: string
+          retiro_cedula: number | null
+          retiro_nivel: string | null
+          retiro_tokens_comunes: string[] | null
+          retiro_tokens_extra: string[] | null
           updated_at: string
           updated_by: string
         }
@@ -41,6 +46,10 @@ export type Database = {
           observacion_1: Database["anticipos"]["Enums"]["observacion_1"]
           observacion_2?: string | null
           requerimiento: string
+          retiro_cedula?: number | null
+          retiro_nivel?: string | null
+          retiro_tokens_comunes?: string[] | null
+          retiro_tokens_extra?: string[] | null
           updated_at?: string
           updated_by: string
         }
@@ -55,10 +64,22 @@ export type Database = {
           observacion_1?: Database["anticipos"]["Enums"]["observacion_1"]
           observacion_2?: string | null
           requerimiento?: string
+          retiro_cedula?: number | null
+          retiro_nivel?: string | null
+          retiro_tokens_comunes?: string[] | null
+          retiro_tokens_extra?: string[] | null
           updated_at?: string
           updated_by?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "registros_retiro_cedula_fkey"
+            columns: ["retiro_cedula"]
+            isOneToOne: false
+            referencedRelation: "retirados"
+            referencedColumns: ["cedula"]
+          },
+        ]
       }
       retirados: {
         Row: {

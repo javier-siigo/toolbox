@@ -12,7 +12,7 @@ Ruta `/ingresos/gestion-anticipos`, proceso `ingresos.gestion-anticipos`. La pá
 
 | Conexión | Uso |
 |---|---|
-| Supabase BD (sesión del usuario) | CRUD sobre `anticipos.registros`; RPC `anticipos.match_colaborador_retirado_batch` |
+| Supabase BD (sesión del usuario) | CRUD sobre `anticipos.registros` (el cruce con excolaboradores lo hacen triggers en la BD) |
 | Supabase BD (service role) | Solo en la importación de retirados |
 | n8n / APIs externas | **Ninguna** |
 
@@ -59,7 +59,7 @@ Todas exigen sesión (`auth.getUser`) y validan con zod (`schema.ts`). Tras escr
 
 | Acción | Qué hace |
 |---|---|
-| `getAnticiposAll()` | Lee hasta **1.000** registros (`MAX_ANTICIPOS_ROWS`), más recientes primero. Llama **una sola vez** a la RPC `anticipos.match_colaborador_retirado_batch` con todos los nombres y adjunta a cada fila `es_retirado` y `retiro_info` (cédula, nombre en el reporte, valor, observación, fecha de reporte, nivel de coincidencia, tokens comunes/extra) |
+| `getAnticiposAll()` | Lee hasta **1.000** registros (`MAX_ANTICIPOS_ROWS`), más recientes primero. Una sola consulta: el cruce ya está guardado en cada registro, y los datos del excolaborador (cédula, nombre en el reporte, valor, observación, fecha de reporte) llegan por la FK `retiro_cedula`. Arma `es_retirado` y `retiro_info` (con nivel de coincidencia y tokens comunes/extra) |
 | `createAnticipo` | Valida formulario, inserta con `created_by/updated_by` = usuario. Duplicado → error de campo |
 | `updateAnticipo` | Actualiza todos los campos editables; fija `updated_by` |
 | `deleteAnticipo(id)` | Elimina por UUID |
@@ -79,7 +79,16 @@ Validaciones: `fecha_rq` debe ser una fecha válida; `fecha_gestion` puede ir va
 
 ## Cruce con excolaboradores
 
-Lo hace la función SQL `anticipos.match_colaborador_retirado_batch` (migración `20261016130000`):
+El resultado se **guarda en el registro** (migración `20261029190000`): `retiro_cedula` (FK a `anticipos.retirados`), `retiro_nivel`, `retiro_tokens_comunes`, `retiro_tokens_extra` y `es_retirado` (generada: `retiro_cedula is not null`). La página no cruza nada al cargar; se recalcula solo cuando algo lo puede cambiar:
+
+| Evento | Trigger | Alcance |
+|---|---|---|
+| Insertar un registro o cambiarle el `nombre` | `registros_marcar_retiro` (before, por fila) → `anticipos.match_colaborador_retirado` | Solo ese registro |
+| Importar, editar o borrar excolaboradores | `retirados_recalcular_registros` (after, por sentencia) → `private.recalcular_retiros()` | Todos los registros; solo escribe los que cambian (~10 ms) |
+
+Los recálculos no tocan `updated_at` (su trigger solo reacciona a las columnas que edita el usuario). Si hiciera falta forzar un recálculo: `select private.recalcular_retiros();`.
+
+El algoritmo de coincidencia (`anticipos.match_colaborador_retirado` / `_batch`):
 
 1. **Normaliza** nombres: minúsculas, sin tildes (`á→a`, `ñ→n`), sin símbolos, separa en tokens.
 2. Compara contra `anticipos.retirados.nombre`. Un candidato es válido si **todos los tokens del nombre buscado están en el del reporte**.
@@ -93,13 +102,12 @@ El resultado incluye `tokens_comunes` y `tokens_extra` para que el usuario pueda
 - Página: `src/app/(app)/ingresos/gestion-anticipos/page.tsx`
 - UI: `src/components/anticipos/` (`anticipos-page`, `anticipos-data-table`, `columns`, `anticipos-form`, `anticipos-edit-sheet`, `anticipos-delete-dialog`, `data-table-features`, `truncated-text`, `importar-retirados/`)
 - Lógica: `src/lib/anticipos/{actions,schema,format}.ts`
-- SQL: `supabase/migrations/20261016120000_match_colaborador_retirado.sql`, `…130000_match_colaborador_retirado_batch.sql`
+- SQL: `supabase/migrations/20261016120000_match_colaborador_retirado.sql`, `…130000_match_colaborador_retirado_batch.sql`, `20261029150000_retirados_tokens.sql`, `20261029190000_registros_retiro_materializado.sql`
 
 ## Hallazgos
 
 1. **Límite silencioso de 1.000 registros**: si se supera, los más antiguos dejan de verse.
-2. Cada carga ejecuta el cruce de **todos** los nombres contra todos los retirados; escalará mal si crecen los datos.
-3. Si la RPC falla, **toda la página falla** (lanza excepción) en lugar de mostrar los anticipos sin el cruce.
-4. Una coincidencia `parcial` puede ser un falso positivo (homónimos): el campo `es_retirado` es `true` para cualquier nivel, incluida la coincidencia parcial.
-5. El enum `revisar_con_harold` contiene un nombre propio; un cambio de responsable exige migración.
-6. Migración de la tabla, enums y políticas no versionadas en el repo.
+2. ~~El cruce se ejecutaba en cada carga~~: resuelto, ahora se guarda en el registro (ver [Cruce con excolaboradores](#cruce-con-excolaboradores)).
+3. Una coincidencia `parcial` puede ser un falso positivo (homónimos): el campo `es_retirado` es `true` para cualquier nivel, incluida la coincidencia parcial.
+4. El enum `revisar_con_harold` contiene un nombre propio; un cambio de responsable exige migración.
+5. Migración de la tabla, enums y políticas no versionadas en el repo.

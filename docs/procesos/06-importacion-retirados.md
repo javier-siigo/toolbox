@@ -75,7 +75,7 @@ npm run match:retirado -- --json --no-interactive "Juan Diego"
 | `anticipos.retirados` | `cedula` (clave del upsert), `nombre`, `nombre_normalizado` (generada), `valor`, `observacion`, `fecha_reporte`, `created_at` |
 | `anticipos.retirados_imports` | `id`, `file_name`, `file_size`, `total_rows`, `upserted`, `errors`, `imported_by`, `imported_at` |
 
-Funciones SQL (migraciones `…120000` y `…130000`): `private.normalize_colaborador_name_unsorted(text)`, `anticipos.match_colaborador_retirado(text)`, `anticipos.match_colaborador_retirado_batch(text[])`. Detalle del algoritmo en [05](05-gestion-anticipos.md#cruce-con-excolaboradores).
+Funciones SQL (migraciones `…120000` y `…130000`): `private.normalize_colaborador_name_unsorted(text)`, `anticipos.match_colaborador_retirado(text)`, `anticipos.match_colaborador_retirado_batch(text[])`. Cada importación (o edición/borrado de retirados) recalcula automáticamente la marca de excolaborador de todos los anticipos (trigger `retirados_recalcular_registros`). Detalle del algoritmo en [05](05-gestion-anticipos.md#cruce-con-excolaboradores).
 
 ## Archivos fuente
 

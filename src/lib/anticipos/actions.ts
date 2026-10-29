@@ -16,34 +16,14 @@ import {
   type AnticipoUpdateInput,
 } from "@/lib/anticipos/schema";
 
-type RetiradoMatch = {
-  query: string;
-  cedula: number;
-  nombre: string;
-  valor: number | null;
-  observacion: string | null;
-  fecha_reporte: string;
-  nivel: "exacto" | "exacto_inverso" | "parcial";
-  tokens_comunes: string[] | null;
-  tokens_extra: string[] | null;
-};
+const REGISTRO_COLUMNS =
+  "id, nombre, requerimiento, falta, observacion_1, observacion_2, fecha_rq, fecha_gestion, created_at, es_retirado, retiro_nivel, retiro_tokens_comunes, retiro_tokens_extra, retirado:retirados(cedula, nombre, valor, observacion, fecha_reporte)";
 
-function buildRetiroInfo(
-  match: RetiradoMatch | null,
-): AnticipoRow["retiro_info"] {
-  if (!match) return null;
-  return {
-    cedula: match.cedula,
-    nombre: match.nombre,
-    valor: match.valor,
-    observacion: match.observacion,
-    fecha_reporte: match.fecha_reporte,
-    nivel: match.nivel,
-    tokensComunes: match.tokens_comunes ?? [],
-    tokensExtra: match.tokens_extra ?? [],
-  };
-}
-
+/**
+ * El cruce con excolaboradores ya viene calculado en cada registro (triggers en la BD:
+ * al insertar/renombrar un registro y al importar excolaboradores), así que la carga es
+ * una sola consulta.
+ */
 export async function getAnticiposAll(): Promise<AnticipoRow[]> {
   const acceso = await autorizar(PROCESOS.GESTION_ANTICIPOS, "ver");
   if (!acceso.ok) return [];
@@ -51,9 +31,7 @@ export async function getAnticiposAll(): Promise<AnticipoRow[]> {
 
   const { data, error } = await supabase
     .schema("anticipos").from("registros")
-    .select(
-      "id, nombre, requerimiento, falta, observacion_1, observacion_2, fecha_rq, fecha_gestion, created_at, nombre_normalizado",
-    )
+    .select(REGISTRO_COLUMNS)
     .order("created_at", { ascending: false })
     .limit(MAX_ANTICIPOS_ROWS);
 
@@ -61,44 +39,24 @@ export async function getAnticiposAll(): Promise<AnticipoRow[]> {
     throw new Error(`No se pudieron cargar los registros: ${error.message}`);
   }
 
-  const rows = (data ?? []) as Array<
-    Omit<AnticipoRow, "es_retirado" | "retiro_info"> & {
-      nombre_normalizado: string | null;
-    }
-  >;
-
-  const names = rows.map((r) => r.nombre).filter((n) => n.trim().length > 0);
-
-  const matchesByQuery = new Map<string, RetiradoMatch>();
-  if (names.length > 0) {
-    const { data: matches, error: matchErr } = await supabase.schema("anticipos").rpc(
-      "match_colaborador_retirado_batch",
-      { p_inputs: names },
-    );
-    if (matchErr) {
-      throw new Error(
-        `No se pudo cruzar con excolaboradores: ${matchErr.message}`,
-      );
-    }
-    for (const m of (matches ?? []) as RetiradoMatch[]) {
-      matchesByQuery.set(m.query, m);
-    }
-  }
-
-  return rows.map((r) => {
-    const match = matchesByQuery.get(r.nombre) ?? null;
+  return (data ?? []).map((r) => {
+    const { retirado, retiro_nivel, retiro_tokens_comunes, retiro_tokens_extra, ...rest } = r;
     return {
-      id: r.id,
-      nombre: r.nombre,
-      requerimiento: r.requerimiento,
-      falta: r.falta,
-      observacion_1: r.observacion_1,
-      observacion_2: r.observacion_2,
-      fecha_rq: r.fecha_rq,
-      fecha_gestion: r.fecha_gestion,
-      created_at: r.created_at,
-      es_retirado: Boolean(match),
-      retiro_info: buildRetiroInfo(match),
+      ...rest,
+      es_retirado: Boolean(retirado),
+      retiro_info:
+        retirado && retiro_nivel
+          ? {
+              cedula: retirado.cedula,
+              nombre: retirado.nombre,
+              valor: retirado.valor,
+              observacion: retirado.observacion,
+              fecha_reporte: retirado.fecha_reporte,
+              nivel: retiro_nivel as NonNullable<AnticipoRow["retiro_info"]>["nivel"],
+              tokensComunes: retiro_tokens_comunes ?? [],
+              tokensExtra: retiro_tokens_extra ?? [],
+            }
+          : null,
     } satisfies AnticipoRow;
   });
 }

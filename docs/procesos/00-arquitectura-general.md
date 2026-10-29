@@ -85,7 +85,7 @@ Plantilla en `.env.example`; se copia a `.env.local`. Validadas en `src/lib/env.
 |---|---|
 | `core` | `procesos`, `permisos`, `usuarios`, `user_activity`, RPC `touch_last_seen`; `guardar_permisos` y `storage_archivos_vencidos` (solo service role) |
 | `conciliaciones` | `bancos` |
-| `anticipos` | `registros`, `retirados`, `retirados_imports`, enums `falta` / `observacion_1`, RPC `match_colaborador_retirado(_batch)` |
+| `anticipos` | `registros`, `retirados`, `retirados_imports`, enums `falta` / `observacion_1`, RPC `match_colaborador_retirado(_batch)`; el cruce se guarda en `registros` por triggers |
 | `comisiones` | `conceptos`, `periodo_valores`, `bases`, `reconocimientos`, `gasto_registrado`, `cierres`, RPC `guardar_cierre` |
 | `export_bancos` | `campos`, `campo_valores`, `plantillas` |
 | `private` | Helpers de RLS/triggers (`tiene_acceso`, `set_updated_at`, `normalize_colaborador_name*`). **No se expone** en la Data API |
