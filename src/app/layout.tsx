@@ -24,8 +24,8 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "SIICO · Portal de automatizaciones",
-    template: "%s · SIICO",
+    default: "Toolbox · Portal de automatizaciones",
+    template: "%s · Toolbox",
   },
   description:
     "Portal interno para centralizar y operar las automatizaciones contables.",
@@ -43,7 +43,7 @@ export default function RootLayout({
       className={`${plexSans.variable} ${plexMono.variable}`}
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
-        <Script id="siico-theme-init" strategy="beforeInteractive">
+        <Script id="toolbox-theme-init" strategy="beforeInteractive">
           {THEME_INIT_SCRIPT}
         </Script>
         <ThemeProvider defaultTheme="system">

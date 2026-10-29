@@ -28,7 +28,7 @@ function selector(target: string) {
 
 /**
  * Botón "¿Cómo usar?" que recorre la interfaz de un proceso con driver.js.
- * El popover se pinta con los tokens del portal (`.siico-tour` en globals.css)
+ * El popover se pinta con los tokens del portal (`.toolbox-tour` en globals.css)
  * y los botones con las variantes de `Button`.
  */
 export function ComoUsar({ steps, className }: { steps: TourStep[]; className?: string }) {
@@ -50,7 +50,7 @@ export function ComoUsar({ steps, className }: { steps: TourStep[]; className?: 
     const oscuro = document.documentElement.classList.contains("dark");
     const d = driver({
       steps: visibles,
-      popoverClass: "siico-tour",
+      popoverClass: "toolbox-tour",
       showProgress: true,
       progressText: "{{current}} de {{total}}",
       nextBtnText: "Siguiente",

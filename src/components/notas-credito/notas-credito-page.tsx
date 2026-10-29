@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { SoloLectura } from "@/components/common/solo-lectura";
 import { ComoUsar } from "@/components/tour/como-usar";
 
 import { HistoryList } from "./history-list";
@@ -58,7 +59,8 @@ function asErrorCode(value: string | undefined): ErrorCode {
   return value && value in ERROR_MESSAGES ? (value as ErrorCode) : "internal";
 }
 
-export function NotasCreditoPageClient() {
+/** `soloLectura` (nivel `ver`): no puede subir ni ejecutar el flujo. */
+export function NotasCreditoPageClient({ soloLectura = false }: { soloLectura?: boolean }) {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [currentRun, setCurrentRun] = useState<NotasCreditoRun | null>(null);
   const [history, setHistory] = useState<NotasCreditoRun[]>([]);
@@ -294,14 +296,20 @@ export function NotasCreditoPageClient() {
       </header>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <UploadCard
-          status={status === "idle" && pendingFile ? "idle" : status}
-          file={pendingFile}
-          onSelect={handleSelect}
-          onSubmit={handleSubmit}
-          onRemove={handleRemove}
-          onRetry={handleRetry}
-        />
+        {soloLectura ? (
+          <SoloLectura className="self-start">
+            Tienes acceso de solo lectura: no puedes ejecutar la conciliación de notas crédito.
+          </SoloLectura>
+        ) : (
+          <UploadCard
+            status={status === "idle" && pendingFile ? "idle" : status}
+            file={pendingFile}
+            onSelect={handleSelect}
+            onSubmit={handleSubmit}
+            onRemove={handleRemove}
+            onRetry={handleRetry}
+          />
+        )}
         <ResultCard
           run={currentRun}
           onDownload={triggerDownload}

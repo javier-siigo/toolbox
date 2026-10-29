@@ -1,19 +1,19 @@
-# Autenticación, roles y administración de usuarios
+# Autenticación, permisos y administración de usuarios
 
 ## Qué hace
 
 Controla quién entra al portal y a qué procesos accede. Tiene tres piezas:
 
 1. **Login/logout** con correo y contraseña (Supabase Auth).
-2. **Roles y países** por usuario (tabla `core.user_roles`), que determinan qué áreas y procesos ve cada persona.
-3. **Pantalla de administración** (`/admin/usuarios`) para asignar roles.
+2. **Permisos por proceso** (tablas `core.permisos` y `core.usuarios`): qué procesos abre cada persona y con qué nivel.
+3. **Pantalla de administración** (`/admin/usuarios`) para asignarlos.
 
 ## Conexiones
 
 | Conexión | Detalle |
 |---|---|
 | Supabase Auth | `signInWithPassword`, `signOut`, `getClaims()`, `auth.admin.listUsers` |
-| Supabase BD | Tabla `core.user_roles` (vía cliente admin) |
+| Supabase BD | `core.usuarios`, `core.permisos`, `core.procesos` (vía cliente admin); RLS con `private.tiene_acceso` |
 | n8n / APIs externas | Ninguna |
 
 ## Login
@@ -47,35 +47,49 @@ En Next 16 reemplaza a `middleware.ts`. Para cada request:
 - Con sesión en `/login` → redirige a `from` o `/dashboard`.
 - Sin sesión en `/` → `/login`.
 
-El layout `(app)/layout.tsx` repite la comprobación, arma el nombre visible (`user_metadata.name` o la parte local del correo) y carga los roles para el sidebar.
+El layout `(app)/layout.tsx` lee la sesión (`requireSesion`) para armar el nombre visible y el menú. **No protege nada**: los layouts no se re-ejecutan al navegar ni cubren server actions; cada página, action y ruta se autoriza sola (ver abajo).
 
-## Roles
+## Permisos por proceso
 
-**Archivos:** `src/lib/auth/roles-shared.ts` (lógica pura, usable en cliente) y `src/lib/auth/roles.ts` (acceso a BD, solo servidor).
+**Archivos:** `src/lib/auth/permisos-shared.ts` (catálogo `PROCESOS`, niveles y decisiones puras; usable en cliente) y `src/lib/auth/acceso.ts` (capa de acceso, solo servidor).
 
-Roles válidos: `admin`, `conciliaciones`, `ingresos`. Países válidos: `CO`, `MX`, `UY`, `CL`, `EC`.
+Cada proceso tiene un id estable (`ingresos.gestion-anticipos`, `conciliaciones.colombia`…) que existe en `core.procesos` y en `PROCESOS`. Un usuario tiene, por proceso, uno de tres niveles (cada uno incluye al anterior):
 
-Se leen de `core.user_roles` (`roles text[]`, `paises text[]`) con el cliente admin y se **cachean 60 s** (`unstable_cache`, tag `user-roles`). Si el usuario no tiene fila, no tiene ningún rol.
+| Nivel | Puede |
+|---|---|
+| `ver` | Consultar y exportar. La UI oculta o deshabilita crear, editar, ejecutar e importar |
+| `usar` | Operar el proceso: crear, editar, legalizar, ejecutar conciliaciones, guardar cierres, plantillas |
+| `gestionar` | Además, configurarlo (hoy: catálogo de campos NetSuite en Auditoría Asientos de Diario) |
 
-### Matriz de acceso
+**Admin** (`core.usuarios.es_admin`) tiene `gestionar` en todo y administra usuarios. Los países de conciliación son procesos: acceso a México = `conciliaciones.mexico`.
 
-| Rol | Conciliaciones | Ingresos | Administración |
-|---|---|---|---|
-| `admin` | Todos los países | Sí | Sí |
-| `conciliaciones` | Solo los países asignados en `paises` | No | No |
-| `ingresos` | No | Sí | No |
-| (sin rol) | No | No | No |
+Los permisos se leen con el cliente admin y se **cachean 60 s** (`unstable_cache`, tag `permisos`); guardar desde la pantalla de admin invalida la caché.
 
-Funciones clave:
+### Capa de acceso: el único guard
 
-- `canAccessArea(info, area)`, `canAccessProceso(info, area, proceso)`: aplican la matriz. En conciliaciones se compara `proceso.flagCode` (p. ej. `CO`) con `paises`.
-- `filterAreas(info, AREAS)`: devuelve solo las áreas/procesos visibles. Lo usan el **sidebar** y el **dashboard**.
-- `requireProcesoAccess(...)`: llama a `notFound()` (404) si no hay acceso. Lo usan las páginas de conciliaciones y el placeholder `[area]/[proceso]`.
-- `requireAdmin(...)`: 404 si no es admin.
+| Punto de entrada | Llamada | Sin acceso |
+|---|---|---|
+| Página de proceso | `const { nivel } = await requireAcceso(PROCESOS.X)` | 404 (`/login` sin sesión) |
+| Página de admin | `await requireAdmin()` | 404 |
+| Server action | `const a = await autorizar(PROCESOS.X, "usar"); if (!a.ok) return { error: a.error }` | Error en el resultado |
+| Route handler | igual que la action + `return respuestaDenegada(a)` | JSON 401/403 |
+
+Las APIs de conciliaciones resuelven el proceso con el `pais` del body (`CONCILIACION_POR_PAIS`). La página pasa `soloLectura={nivel === "ver"}` al componente cliente.
+
+RLS repite la regla en la BD con `private.tiene_acceso(proceso, nivel)`: `SELECT` con `ver`, escrituras con `usar` (o `gestionar` para configuración).
+
+**`npm run lint` corre `scripts/check-acceso.mjs`**, que falla si una página no llama a `requireAcceso`/`requireAdmin`, si una función exportada de un archivo `"use server"` no llama a `autorizar`, si un route handler no autoriza, o si los ids de `PROCESOS` no coinciden con `core.procesos`. Las excepciones (login/logout, cron, Inicio, Documentación) están listadas en el script con su motivo.
+
+### Agregar un proceso
+
+1. Migración: `insert into core.procesos (id, area, nombre) values ('area.slug', …)` y políticas RLS con `private.tiene_acceso('area.slug', …)`.
+2. Agregar el id a `PROCESOS` y `id: PROCESOS.X` en su entrada de `src/lib/navigation.ts`.
+3. Página con `requireAcceso`, actions con `autorizar`. `npm run lint` avisa si falta algo.
+4. Dar acceso desde `/admin/usuarios`.
 
 ### Dashboard (`/dashboard`)
 
-Muestra, por área, la lista de procesos accesibles (con bandera si es de país). Sin roles asignados muestra "Aún no tienes procesos asignados".
+Muestra, por área, la lista de procesos accesibles (con bandera si es de país). Sin permisos muestra "Aún no tienes procesos asignados".
 
 ### Catálogo (`src/lib/navigation.ts`)
 
@@ -83,22 +97,26 @@ Define las áreas (`conciliaciones`, `ingresos`, `admin`) y sus procesos. **Agre
 
 ## Administración de usuarios (`/admin/usuarios`)
 
-**Archivos:** `src/lib/admin/users.ts`, `src/app/(app)/admin/usuarios/{page,users-table}.tsx`
+Solo admins (`requireAdmin`). Por usuario: el flag de administrador y, por área, un selector —/Ver/Usar/Gestionar por proceso más un atajo para toda el área. Muestra la vista previa de lo que verá en el portal y el diff antes de guardar.
 
-- `listUsersWithRoles()`: solo admins. Une `core.user_roles` con todos los usuarios de `auth.users` (paginando de a 200 con `auth.admin.listUsers`). Los registros de `core.user_roles` sin usuario en Auth aparecen como **"(usuario huérfano)"**. Orden alfabético por correo. Incluye `last_sign_in_at`.
-- `updateUserRoles({userId, roles, paises})`: solo admins. Valida con zod (UUID, roles y países del catálogo). **Los países solo se guardan si el rol `conciliaciones` está marcado**; de lo contrario se guardan vacíos. Hace `upsert` por `user_id` y llama `revalidateTag("user-roles")` para que el cambio sea inmediato.
-- `requireCurrentAdmin()`: sin sesión → `/login`; sin rol admin → `/`.
+**Archivo:** `src/lib/admin/users.ts`.
+
+- `listUsuarios()`: une `auth.users` (paginando de a 200) con `core.usuarios`, `core.permisos` y `core.user_activity`. Las FK con `on delete cascade` evitan registros huérfanos.
+- `updatePermisos({ userId, esAdmin, procesos })`: valida con zod, impide que un admin se quite su propio acceso y llama a `core.guardar_permisos` (RPC atómica, solo service role) que reemplaza todos los permisos del usuario. Invalida la caché con `revalidateTag("permisos")`.
 
 ## Base de datos
 
-| Tabla | Columnas | Notas |
-|---|---|---|
-| `core.user_roles` | `user_id` (PK), `roles text[]`, `paises text[]`, `updated_at` | Escrita solo con service role |
+| Tabla / función | Contenido |
+|---|---|
+| `core.procesos` | Catálogo: `id`, `area`, `nombre`, `pais` (solo conciliaciones), `activo`. Lectura para `authenticated` |
+| `core.permisos` | `(user_id, proceso_id)` PK, `nivel` (`ver`/`usar`/`gestionar`), `otorgado_por`, `otorgado_at`. Solo service role |
+| `core.usuarios` | `user_id`, `es_admin`. Solo service role |
+| `private.tiene_acceso(proceso, nivel)` | Usada por todas las políticas RLS. `security definer`, no expuesta en la API |
+| `core.guardar_permisos(...)` | Guardado atómico desde la pantalla de admin. Solo service role |
 
-La función SQL `public.current_user_has_role(text)` (usada por las políticas RLS de comisiones) **no está en las migraciones del repo**.
+Migraciones: `20261029160000_permisos_por_proceso.sql` (modelo, traducción de los roles anteriores y RLS) y `20261029170000_guardar_permisos.sql`.
 
 ## Hallazgos
 
-- Un usuario nuevo no ve nada hasta que un admin le asigne roles; es el comportamiento esperado.
-- Los roles se cachean 60 s; `updateUserRoles` invalida la caché con `revalidateTag`, por lo que el cambio debería verse de inmediato.
-- Las páginas `ingresos/*` no verifican rol en servidor (ver [00](00-arquitectura-general.md#10-hallazgos-transversales)).
+- Un usuario nuevo no ve nada hasta que un admin le dé acceso a un proceso; es el comportamiento esperado.
+- Los permisos se cachean 60 s; guardar desde la pantalla de admin invalida la caché, así que el cambio se ve de inmediato.

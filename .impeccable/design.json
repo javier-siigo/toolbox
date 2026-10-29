@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-09-28T13:44:07Z",
-  "title": "Design System: SIICO Portal",
+  "title": "Design System: Toolbox Portal",
   "extensions": {
     "colorMeta": {
       "primary": {
@@ -226,8 +226,8 @@
       "name": "Sidebar Mark Tile",
       "kind": "nav",
       "refersTo": "sidebar-menu-button",
-      "description": "SIICO wordmark tile in the sidebar header. 32×32 white square on the Siigo blue chrome, Siigo blue dashboard icon inside.",
-      "html": "<div class=\"ds-sidebar-mark\"><span>SIICO</span><span class=\"ds-sidebar-mark-sub\">Portal contable</span></div>",
+      "description": "Toolbox wordmark tile in the sidebar header. 32×32 white square on the Siigo blue chrome, Siigo blue dashboard icon inside.",
+      "html": "<div class=\"ds-sidebar-mark\"><span>Toolbox</span><span class=\"ds-sidebar-mark-sub\">Portal contable</span></div>",
       "css": ".ds-sidebar-mark { display: inline-flex; align-items: center; gap: 0.5rem; background-color: var(--color-sidebar); color: var(--color-sidebar-foreground); padding: 0.5rem 0.625rem; min-width: 0; } .ds-sidebar-mark-tile { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: var(--radius-md, 0.375rem); background-color: var(--color-sidebar-primary); color: var(--color-sidebar-primary-foreground); box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); } .ds-sidebar-mark-stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; } .ds-sidebar-mark-text { font-size: 0.875rem; font-weight: 600; color: var(--color-sidebar-foreground); } .ds-sidebar-mark-sub { font-size: 0.6875rem; color: color-mix(in oklch, var(--color-sidebar-foreground) 70%, transparent); }"
     },
     {
@@ -257,7 +257,7 @@
   ],
   "narrative": {
     "northStar": "The Operations Console in Siigo Blue.",
-    "overview": "SIICO's portal is a working console for the Siigo accounting team — a place to dispatch automations, audit their outcomes, and operate on tabular data without leaving the browser. The visual language borrows from engineering and accounting tooling (issue trackers, ERP tables, terminal UIs): typography carries weight, borders carry structure, and Siigo blue owns the chrome while a cool gray canvas plus white cards carry the work. Density still wins over breathing room; every pixel should help a counter answer \"what is the status of this run?\" or \"where is this anticipo?\" without scrolling for context.\n\nThe system is bilingual in form (light/dark themes over the same tokens via Tailwind v4's @custom-variant dark) but monolingual in voice (Spanish UI). It runs on Tailwind v4's CSS-first tokens and shadcn/ui's new-york primitives, with IBM Plex Sans and IBM Plex Mono as the only typefaces. Light and dark themes are not equals aesthetically — light is the working canvas for daytime data entry, dark is the after-hours and reduced-glare default — but neither is louder than the other.",
+    "overview": "Toolbox's portal is a working console for the Siigo accounting team — a place to dispatch automations, audit their outcomes, and operate on tabular data without leaving the browser. The visual language borrows from engineering and accounting tooling (issue trackers, ERP tables, terminal UIs): typography carries weight, borders carry structure, and Siigo blue owns the chrome while a cool gray canvas plus white cards carry the work. Density still wins over breathing room; every pixel should help a counter answer \"what is the status of this run?\" or \"where is this anticipo?\" without scrolling for context.\n\nThe system is bilingual in form (light/dark themes over the same tokens via Tailwind v4's @custom-variant dark) but monolingual in voice (Spanish UI). It runs on Tailwind v4's CSS-first tokens and shadcn/ui's new-york primitives, with IBM Plex Sans and IBM Plex Mono as the only typefaces. Light and dark themes are not equals aesthetically — light is the working canvas for daytime data entry, dark is the after-hours and reduced-glare default — but neither is louder than the other.",
     "keyCharacteristics": [
       "Sober, professional, dense; information density wins over whitespace",
       "Three-zone contrast: Siigo blue sidebar chrome / cool gray canvas / white cards. The brand owns the rail; the work owns the well.",
@@ -268,7 +268,7 @@
     ],
     "rules": [
       { "name": "The Three-Zone Contrast Rule", "body": "Every screen is composed of three concentric layers — Siigo blue sidebar, gray canvas, white cards. Each layer earns its color from its job: brand voice, work surface, container. Don't collapse two layers into the same color.", "section": "colors" },
-      { "name": "The One-Voice Rule", "body": "Siigo blue appears in roughly ≤10% of any given viewport (plus the sidebar, which earns its color from being brand chrome). It speaks for primary actions, the SIICO mark, and focus rings. It never co-occurs with another bright fill on the same screen — a Siigo blue button next to a coral destructive button on the same row breaks the rule.", "section": "colors" },
+      { "name": "The One-Voice Rule", "body": "Siigo blue appears in roughly ≤10% of any given viewport (plus the sidebar, which earns its color from being brand chrome). It speaks for primary actions, the Toolbox mark, and focus rings. It never co-occurs with another bright fill on the same screen — a Siigo blue button next to a coral destructive button on the same row breaks the rule.", "section": "colors" },
       { "name": "The Chart-Only Hue Rule", "body": "Hues other than Siigo blue exist exclusively inside data viz (chart slots 2–5 and KPI tone chips). Emerald/amber/sky/rose tones are status colors, not decorative accents; do not promote them into brand surfaces.", "section": "colors" },
       { "name": "The Slate-Blue Family Rule", "body": "Neutrals and the primary accent share the cool blue hue family (235°–256°). Coral is the only escape hatch from this family, used solely for destructive intent.", "section": "colors" },
       { "name": "The Mono-Number Rule", "body": "Whenever a number is stacked, sorted, or compared in a list, render it in IBM Plex Mono with `tabular-nums`. This includes KPI values, dates in tables, counts in pagination (`Mostrando 1–5 de 23 registros`), and percent suffixes.", "section": "typography" },

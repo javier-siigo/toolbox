@@ -1,7 +1,7 @@
 import "server-only";
 
-import { listUsersWithRoles } from "@/lib/admin/users";
-import { canAccessProceso, isAdmin, type UserRolesInfo } from "@/lib/auth/roles";
+import { listUsuarios } from "@/lib/admin/users";
+import { CONCILIACION_POR_PAIS, PROCESOS, puede, type Permisos } from "@/lib/auth/permisos-shared";
 import { daysSinceIsoDate } from "@/lib/anticipos/schema";
 import { periodoActual, periodoLabel, shiftPeriodo } from "@/lib/comisiones/calculo";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,7 +35,8 @@ export interface ResumenComisiones {
 
 export interface ResumenAdmin {
   usuarios: number;
-  sinRol: number;
+  /** Ni admin ni acceso a ningún proceso: no ven nada. */
+  sinPermisos: number;
 }
 
 export interface ResumenInicio {
@@ -138,19 +139,23 @@ async function resumenBancos(paises: string[] | null): Promise<Record<string, nu
 }
 
 async function resumenAdmin(): Promise<ResumenAdmin> {
-  const usuarios = await listUsersWithRoles();
-  return { usuarios: usuarios.length, sinRol: usuarios.filter((u) => u.roles.length === 0).length };
+  const usuarios = await listUsuarios();
+  return {
+    usuarios: usuarios.length,
+    sinPermisos: usuarios.filter((u) => !u.esAdmin && Object.keys(u.procesos).length === 0).length,
+  };
 }
 
-export async function resumenInicio(roles: UserRolesInfo, ahora: Date): Promise<ResumenInicio> {
-  const ingresos = canAccessProceso(roles, "ingresos", { slug: "gestion-anticipos" });
-  const admin = isAdmin(roles);
-  const conciliaciones = admin || roles.roles.includes("conciliaciones");
+export async function resumenInicio(permisos: Permisos, ahora: Date): Promise<ResumenInicio> {
+  const admin = permisos.esAdmin;
+  const paises = Object.entries(CONCILIACION_POR_PAIS)
+    .filter(([, proceso]) => puede(permisos, proceso))
+    .map(([pais]) => pais);
 
   const [anticipos, comisiones, bancos, resumenAdm] = await Promise.all([
-    ingresos ? intentar(() => resumenAnticipos(ahora)) : undefined,
-    ingresos ? intentar(() => resumenComisiones(ahora)) : undefined,
-    conciliaciones ? intentar(() => resumenBancos(admin ? null : roles.paises)) : undefined,
+    puede(permisos, PROCESOS.GESTION_ANTICIPOS) ? intentar(() => resumenAnticipos(ahora)) : undefined,
+    puede(permisos, PROCESOS.CALCULO_COMISIONES) ? intentar(() => resumenComisiones(ahora)) : undefined,
+    paises.length > 0 ? intentar(() => resumenBancos(admin ? null : paises)) : undefined,
     admin ? intentar(resumenAdmin) : undefined,
   ]);
   return { anticipos, comisiones, bancos, admin: resumenAdm };

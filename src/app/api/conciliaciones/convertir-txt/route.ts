@@ -11,7 +11,8 @@ import {
   MAX_TXT_TOTAL_LABEL,
   isTxtFilename,
 } from "@/lib/conciliaciones/particularidades";
-import { createClient } from "@/lib/supabase/server";
+import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
+import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
 
 function jsonError(message: string, code: string, status: number) {
   return NextResponse.json({ error: message, code }, { status });
@@ -21,12 +22,6 @@ export const runtime = "nodejs";
 export const maxDuration = 150;
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) {
-    return jsonError("Tu sesión expiró. Vuelve a iniciar sesión.", "unauthorized", 401);
-  }
-
   let form: FormData;
   try {
     form = await request.formData();
@@ -43,6 +38,10 @@ export async function POST(request: Request) {
   if (typeof pais !== "string" || pais.length === 0) {
     return jsonError("Falta el país", "bad_request", 400);
   }
+  const proceso = CONCILIACION_POR_PAIS[pais];
+  if (!proceso) return jsonError("País no válido", "bad_request", 400);
+  const acceso = await autorizar(proceso, "usar");
+  if (!acceso.ok) return respuestaDenegada(acceso);
   if (typeof banco !== "string" || banco.length === 0) {
     return jsonError("Falta el banco", "bad_request", 400);
   }

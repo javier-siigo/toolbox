@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { isAdmin, type UserRolesInfo } from "@/lib/auth/roles-shared";
+import type { Permisos } from "@/lib/auth/permisos-shared";
 import { findArea, findProceso } from "@/lib/navigation";
 
 import { ThemeToggle } from "./theme-toggle";
@@ -11,7 +11,7 @@ import { UserMenu } from "./user-menu";
 
 interface TopbarProps {
   user: { name: string; email: string };
-  roles: UserRolesInfo;
+  permisos: Permisos;
 }
 
 interface ContextInfo {
@@ -47,7 +47,7 @@ function resolveContext(pathname: string | null): ContextInfo | null {
   return null;
 }
 
-export function Topbar({ user, roles }: TopbarProps) {
+export function Topbar({ user, permisos }: TopbarProps) {
   const pathname = usePathname();
   const context = resolveContext(pathname);
 
@@ -70,7 +70,7 @@ export function Topbar({ user, roles }: TopbarProps) {
       )}
       <div className="flex items-center gap-1">
         <ThemeToggle />
-        <UserMenu name={user.name} email={user.email} esAdmin={isAdmin(roles)} />
+        <UserMenu name={user.name} email={user.email} esAdmin={permisos.esAdmin} />
       </div>
     </header>
   );

@@ -4,8 +4,7 @@ import { DocumentoMarkdown } from "@/components/documentacion/markdown";
 import { NavegacionDocumentos } from "@/components/documentacion/navegacion";
 import { Toc } from "@/components/documentacion/toc";
 import { PageTransition } from "@/components/motion/page-transition";
-import { requireProcesoAccess } from "@/lib/auth/roles";
-import { contextoDocumentacion } from "@/lib/documentacion/acceso";
+import { contextoDocumentacion, puedeDocumento } from "@/lib/documentacion/acceso";
 import { anclasPorArchivo, cargarDocumento } from "@/lib/documentacion/contenido";
 import { DOCUMENTOS, findDocumento } from "@/lib/documentacion/registry";
 
@@ -29,8 +28,8 @@ export default async function DocumentoPage({ params }: PageProps) {
   // Slug fuera del registro: 404 propio de la documentación (not-found.tsx).
   if (!meta) notFound();
 
-  const { roles, esAdmin, accesibles } = await contextoDocumentacion();
-  await requireProcesoAccess(roles, "documentacion", meta);
+  const { permisos, esAdmin, accesibles } = await contextoDocumentacion();
+  if (!puedeDocumento(permisos, meta)) notFound();
 
   const [doc, mapa] = await Promise.all([
     cargarDocumento(meta, esAdmin),

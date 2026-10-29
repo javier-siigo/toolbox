@@ -1,98 +1,75 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
+import { autorizarAdmin } from "@/lib/auth/acceso";
 import {
-  getUserRoles,
-  isAdmin,
-  ALL_ROLES,
-  KNOWN_PAISES,
-  ROLE_ADMIN,
-  ROLE_CONCILIACIONES,
-} from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+  NIVELES,
+  TODOS_LOS_PROCESOS,
+  esNivel,
+  esProcesoId,
+  type Nivel,
+  type ProcesoId,
+} from "@/lib/auth/permisos-shared";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+export interface UsuarioConPermisos {
+  id: string;
+  email: string;
+  esAdmin: boolean;
+  procesos: Partial<Record<ProcesoId, Nivel>>;
+  lastSignInAt: string | null;
+  /** Última request con sesión (`core.user_activity`, se escribe cada ≥5 min). */
+  lastSeenAt: string | null;
+}
 
 const updateSchema = z.object({
   userId: z.string().uuid("userId inválido"),
-  roles: z.array(z.enum(ALL_ROLES)).default([]),
-  paises: z.array(z.enum(KNOWN_PAISES)).default([]),
+  esAdmin: z.boolean(),
+  procesos: z.partialRecord(z.enum(TODOS_LOS_PROCESOS as [ProcesoId, ...ProcesoId[]]), z.enum(NIVELES)),
 });
 
-export type UpdateUserRolesInput = z.infer<typeof updateSchema>;
+export type UpdatePermisosInput = z.infer<typeof updateSchema>;
 
-export type UpdateUserRolesResult =
-  | { ok: true }
-  | { ok: false; error: string };
+export type UpdatePermisosResult = { ok: true } | { ok: false; error: string };
 
-async function requireCurrentAdmin(): Promise<string> {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub as string | undefined;
-  if (!userId) redirect("/login");
-  const roles = await getUserRoles(userId);
-  if (!isAdmin(roles)) redirect("/");
-  return userId;
-}
-
-export async function listUsersWithRoles(): Promise<
-  {
-    id: string;
-    email: string;
-    roles: string[];
-    paises: string[];
-    lastSignInAt: string | null;
-    lastSeenAt: string | null;
-  }[]
-> {
-  await requireCurrentAdmin();
+export async function listUsuarios(): Promise<UsuarioConPermisos[]> {
+  const acceso = await autorizarAdmin();
+  if (!acceso.ok) throw new Error(acceso.error);
   const admin = createAdminClient();
 
-  const { data: rolesData, error: rolesError } = await admin
-    .schema("core").from("user_roles")
-    .select("user_id, roles, paises");
-  if (rolesError) throw new Error(rolesError.message);
+  const [usuarios, permisos, actividad] = await Promise.all([
+    admin.schema("core").from("usuarios").select("user_id, es_admin"),
+    admin.schema("core").from("permisos").select("user_id, proceso_id, nivel"),
+    admin.schema("core").from("user_activity").select("user_id, last_seen_at"),
+  ]);
+  const error = usuarios.error ?? permisos.error ?? actividad.error;
+  if (error) throw new Error(error.message);
 
-  const byUser = new Map<string, { roles: string[]; paises: string[] }>();
-  for (const row of rolesData ?? []) {
-    byUser.set(row.user_id as string, {
-      roles: Array.isArray(row.roles) ? (row.roles as string[]) : [],
-      paises: Array.isArray(row.paises) ? (row.paises as string[]) : [],
-    });
+  const esAdmin = new Set((usuarios.data ?? []).filter((u) => u.es_admin).map((u) => u.user_id));
+  const porUsuario = new Map<string, Partial<Record<ProcesoId, Nivel>>>();
+  for (const p of permisos.data ?? []) {
+    if (!esProcesoId(p.proceso_id) || !esNivel(p.nivel)) continue;
+    const actual = porUsuario.get(p.user_id) ?? {};
+    actual[p.proceso_id] = p.nivel;
+    porUsuario.set(p.user_id, actual);
   }
+  const lastSeen = new Map((actividad.data ?? []).map((r) => [r.user_id, r.last_seen_at]));
 
-  const { data: activityData, error: activityError } = await admin
-    .schema("core").from("user_activity")
-    .select("user_id, last_seen_at");
-  if (activityError) throw new Error(activityError.message);
-  const lastSeen = new Map<string, string>(
-    (activityData ?? []).map((row) => [row.user_id as string, row.last_seen_at as string]),
-  );
-
-  const seen = new Set<string>();
-  const merged: {
-    id: string;
-    email: string;
-    roles: string[];
-    paises: string[];
-    lastSignInAt: string | null;
-    lastSeenAt: string | null;
-  }[] = [];
+  // `core.usuarios` y `core.permisos` tienen FK con cascade a auth.users: no hay huérfanos.
+  const out: UsuarioConPermisos[] = [];
   let page = 1;
   while (true) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw new Error(error.message);
+    const { data, error: authError } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (authError) throw new Error(authError.message);
     for (const u of data.users) {
       if (!u.email) continue;
-      seen.add(u.id);
-      const r = byUser.get(u.id) ?? { roles: [], paises: [] };
-      merged.push({
+      out.push({
         id: u.id,
         email: u.email,
-        roles: r.roles,
-        paises: r.paises,
+        esAdmin: esAdmin.has(u.id),
+        procesos: porUsuario.get(u.id) ?? {},
         lastSignInAt: u.last_sign_in_at ?? null,
         lastSeenAt: lastSeen.get(u.id) ?? null,
       });
@@ -101,83 +78,33 @@ export async function listUsersWithRoles(): Promise<
     page += 1;
   }
 
-  for (const [userId, r] of byUser.entries()) {
-    if (!seen.has(userId)) {
-      merged.push({
-        id: userId,
-        email: "(usuario huérfano)",
-        roles: r.roles,
-        paises: r.paises,
-        lastSignInAt: null,
-        lastSeenAt: null,
-      });
-    }
-  }
-
-  merged.sort((a, b) => a.email.localeCompare(b.email));
-  return merged;
+  out.sort((a, b) => a.email.localeCompare(b.email));
+  return out;
 }
 
-export async function updateUserRoles(
-  input: UpdateUserRolesInput,
-): Promise<UpdateUserRolesResult> {
-  const currentUserId = await requireCurrentAdmin();
+export async function updatePermisos(input: UpdatePermisosInput): Promise<UpdatePermisosResult> {
+  const acceso = await autorizarAdmin();
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) {
-    return {
-      ok: false,
-      error:
-        parsed.error.issues[0]?.message ?? "Datos de roles inválidos",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Permisos inválidos" };
   }
-
-  const rolesSet = new Set(parsed.data.roles);
   // Evita que un admin se quede fuera de esta misma pantalla.
-  if (parsed.data.userId === currentUserId && !rolesSet.has(ROLE_ADMIN)) {
-    return { ok: false, error: "No puedes quitarte tu propio rol Admin." };
+  if (parsed.data.userId === acceso.userId && !parsed.data.esAdmin) {
+    return { ok: false, error: "No puedes quitarte tu propio acceso de administrador." };
   }
-  const paises =
-    rolesSet.has(ROLE_CONCILIACIONES) ? parsed.data.paises : [];
 
-  const admin = createAdminClient();
-  const { error } = await admin
-    .schema("core").from("user_roles")
-    .upsert(
-      {
-        user_id: parsed.data.userId,
-        roles: parsed.data.roles,
-        paises,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
+  const { error } = await createAdminClient()
+    .schema("core")
+    .rpc("guardar_permisos", {
+      p_user_id: parsed.data.userId,
+      p_es_admin: parsed.data.esAdmin,
+      p_permisos: parsed.data.procesos,
+      p_otorgado_por: acceso.userId,
+    });
   if (error) return { ok: false, error: error.message };
 
-  revalidateTag("user-roles", "max");
-  return { ok: true };
-}
-/**
- * Borra el registro de roles de un usuario que ya no existe en Auth.
- * Se niega si la cuenta sigue existiendo, para no usarlo como "quitar acceso".
- */
-export async function deleteOrphanRoles(
-  userId: string,
-): Promise<UpdateUserRolesResult> {
-  await requireCurrentAdmin();
-  const parsed = z.string().uuid("userId inválido").safeParse(userId);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "userId inválido" };
-  }
-
-  const admin = createAdminClient();
-  const { data } = await admin.auth.admin.getUserById(parsed.data);
-  if (data?.user) {
-    return { ok: false, error: "El usuario tiene cuenta en Auth; quítale los roles en su lugar." };
-  }
-
-  const { error } = await admin.schema("core").from("user_roles").delete().eq("user_id", parsed.data);
-  if (error) return { ok: false, error: error.message };
-
-  revalidateTag("user-roles", "max");
+  revalidateTag("permisos", "max");
   return { ok: true };
 }

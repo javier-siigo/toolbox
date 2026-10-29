@@ -86,8 +86,9 @@ import { legalizeAnticipo } from "@/lib/anticipos/actions";
 
 interface AnticiposDataTableProps {
   rows: AnticipoRow[];
-  onEdit: (row: AnticipoRow) => void;
-  onDelete: (row: AnticipoRow) => void;
+  /** Sin handlers (nivel `ver`) la tabla no muestra la columna de acciones. */
+  onEdit?: (row: AnticipoRow) => void;
+  onDelete?: (row: AnticipoRow) => void;
   highlightedRowIds?: {
     added?: ReadonlySet<string>;
     legalized?: ReadonlySet<string>;
@@ -166,7 +167,7 @@ function RowActionsDropdown({
 const DEFAULT_PAGE_SIZE = 5;
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50, 100] as const;
 const ALL = "__all__";
-const COLUMN_SIZING_STORAGE_KEY = "siico:anticipos:columnSizing:v2";
+const COLUMN_SIZING_STORAGE_KEY = "toolbox:anticipos:columnSizing:v2";
 
 function loadColumnSizing(): ColumnSizingState {
   if (typeof window === "undefined") return {};
@@ -295,6 +296,7 @@ export function AnticiposDataTable({
 
   const actionsColumn = React.useMemo(
     () =>
+      onEdit && onDelete &&
       columnHelper.display({
         id: "actions",
         header: () => <span className="sr-only">Acciones</span>,
@@ -317,7 +319,7 @@ export function AnticiposDataTable({
   );
 
   const fullColumns = React.useMemo(
-    () => [...columns, actionsColumn],
+    () => (actionsColumn ? [...columns, actionsColumn] : columns),
     [actionsColumn],
   );
 

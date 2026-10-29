@@ -11,6 +11,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+import { PROCESOS, type ProcesoId } from "@/lib/auth/permisos-shared";
 import { DOCUMENTOS } from "@/lib/documentacion/registry";
 
 export type Proceso = {
@@ -19,8 +20,10 @@ export type Proceso = {
   description: string;
   icon: LucideIcon;
   flagCode?: string;
-  /** Roles que dan acceso (además de admin); vacío = cualquier usuario autenticado. Solo Documentación. */
-  roles?: readonly string[];
+  /** Proceso con permisos propios (`core.procesos`). Sin `id`, decide `requiere`. */
+  id?: ProcesoId;
+  /** Sin `id`: visible con acceso a alguno de estos procesos; vacío = cualquier usuario. Solo Documentación. */
+  requiere?: readonly ProcesoId[];
 };
 
 export type Area = {
@@ -41,6 +44,7 @@ export const AREAS: Area[] = [
     icon: Scale,
     procesos: [
       {
+        id: PROCESOS.CONCILIACION_CHILE,
         slug: "chile",
         label: "Chile",
         description: "Conciliación contable para operaciones en Chile.",
@@ -48,6 +52,7 @@ export const AREAS: Area[] = [
         flagCode: "CL",
       },
       {
+        id: PROCESOS.CONCILIACION_COLOMBIA,
         slug: "colombia",
         label: "Colombia",
         description: "Conciliación contable para operaciones en Colombia.",
@@ -55,6 +60,7 @@ export const AREAS: Area[] = [
         flagCode: "CO",
       },
       {
+        id: PROCESOS.CONCILIACION_ECUADOR,
         slug: "ecuador",
         label: "Ecuador",
         description: "Conciliación contable para operaciones en Ecuador.",
@@ -62,6 +68,7 @@ export const AREAS: Area[] = [
         flagCode: "EC",
       },
       {
+        id: PROCESOS.CONCILIACION_MEXICO,
         slug: "mexico",
         label: "México",
         description: "Conciliación contable para operaciones en México.",
@@ -69,6 +76,7 @@ export const AREAS: Area[] = [
         flagCode: "MX",
       },
       {
+        id: PROCESOS.CONCILIACION_URUGUAY,
         slug: "uruguay",
         label: "Uruguay",
         description: "Conciliación contable para operaciones en Uruguay.",
@@ -84,6 +92,7 @@ export const AREAS: Area[] = [
     icon: TrendingUp,
     procesos: [
       {
+        id: PROCESOS.GESTION_ANTICIPOS,
         slug: "gestion-anticipos",
         label: "Gestión y Legalización de Anticipos",
         description:
@@ -91,12 +100,14 @@ export const AREAS: Area[] = [
         icon: HandCoins,
       },
       {
+        id: PROCESOS.NOTAS_CREDITO,
         slug: "notas-credito",
         label: "Notas crédito",
         description: "Registro y gestión de notas crédito.",
         icon: Receipt,
       },
       {
+        id: PROCESOS.CALCULO_COMISIONES,
         slug: "calculo-comisiones",
         label: "Cálculo de Comisiones",
         description:
@@ -104,6 +115,7 @@ export const AREAS: Area[] = [
         icon: Calculator,
       },
       {
+        id: PROCESOS.EXPORT_BANCOS,
         slug: "export-bancos",
         label: "Auditoría Asientos de Diario",
         description:
@@ -123,7 +135,7 @@ export const AREAS: Area[] = [
       label: d.titulo,
       description: d.descripcion,
       icon: FileText,
-      roles: d.roles,
+      requiere: d.requiere,
     })),
   },
   {

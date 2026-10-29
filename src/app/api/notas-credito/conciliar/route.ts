@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { createClient } from "@/lib/supabase/server";
+import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
+import { PROCESOS } from "@/lib/auth/permisos-shared";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ACCEPTED_EXTENSIONS,
@@ -39,12 +40,9 @@ function isUserStoragePath(path: string, userId: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) {
-    return jsonError("Tu sesión expiró. Vuelve a iniciar sesión.", "unauthorized", 401);
-  }
-  const userId = data.claims.sub;
+  const acceso = await autorizar(PROCESOS.NOTAS_CREDITO, "usar");
+  if (!acceso.ok) return respuestaDenegada(acceso);
+  const { userId } = acceso;
 
   let body: unknown;
   try {

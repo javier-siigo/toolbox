@@ -6,7 +6,7 @@ El usuario sube un archivo de notas crédito; el portal lo envía a un **workflo
 
 ## Acceso
 
-Ruta `/ingresos/notas-credito`, área **Ingresos** (rol `ingresos` o `admin`). El sidebar solo la muestra a esos roles, pero **ni la página ni las API validan el rol en servidor** (solo sesión). Ver [hallazgos](#hallazgos).
+Ruta `/ingresos/notas-credito`, área **Ingresos**, proceso `ingresos.notas-credito`. La página exige acceso (`requireAcceso`) y las dos APIs exigen nivel `usar`; con `ver` la página muestra el aviso de solo lectura en lugar de la carga.
 
 ## Flujo del usuario
 

@@ -15,7 +15,7 @@ Cada mes el portal calcula, para **todas las cohortes vigentes**, el gasto a rec
 
 ## Acceso
 
-Ruta `/ingresos/calculo-comisiones`, área Ingresos. Los datos están protegidos por **RLS**: solo usuarios con rol `ingresos` o `admin` pueden leer/escribir las tablas `comisiones.*`. La página no llama a `requireProcesoAccess`; si Supabase falla o no hay permisos, sigue abriendo y muestra `errorDatos` (se puede leer el informe pero no calcular ni guardar).
+Ruta `/ingresos/calculo-comisiones`, área Ingresos. Proceso `ingresos.calculo-comisiones`: la página exige acceso (`requireAcceso`); leer pide `ver` y cualquier escritura (conceptos, valores, facturación, cierres) pide `usar`, en las server actions y en RLS. Con `ver` los paneles editables quedan deshabilitados y no se puede guardar ni eliminar cierres; sí cargar el informe y exportar. Si Supabase falla, la página sigue abriendo y muestra `errorDatos`.
 
 ## Conexiones
 
@@ -140,7 +140,7 @@ Borra el cierre y los reconocimientos de **fuente `informe`** de ese período; *
 
 `comisiones_ejecuciones` (modelo anterior de "pool global") fue **eliminada**.
 
-Todas tienen **RLS** con la política `<tabla>_ingresos_all`: `authenticated` con `current_user_has_role('ingresos')` o `'admin'`.
+Todas tienen **RLS** con dos políticas: `<tabla>_ver` (SELECT con `private.tiene_acceso('ingresos.calculo-comisiones', 'ver')`) y `<tabla>_usar` (todo con nivel `usar`).
 
 ### Histórico
 

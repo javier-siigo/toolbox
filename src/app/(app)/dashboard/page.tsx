@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
-
 import Link from "next/link";
 import { BookOpen, LayoutDashboard } from "lucide-react";
 
-import { filterAreas, getUserRoles, isAdmin } from "@/lib/auth/roles";
+import { requireSesion } from "@/lib/auth/acceso";
+import { filterAreas } from "@/lib/auth/permisos-shared";
 import { periodoActual, periodoLabel, shiftPeriodo } from "@/lib/comisiones/calculo";
 import {
   ahoraBogota,
@@ -17,7 +16,6 @@ import { ProcesosPorArea, type CifraProceso } from "@/components/inicio/procesos
 import { PageTransition } from "@/components/motion/page-transition";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Inicio",
@@ -80,15 +78,15 @@ function itemsAtencion(r: ResumenInicio): ItemAtencion[] {
       accion: { label: "Continuar", href: "/ingresos/calculo-comisiones" },
     });
   }
-  if (r.admin && r.admin.sinRol > 0) {
-    const n = r.admin.sinRol;
+  if (r.admin && r.admin.sinPermisos > 0) {
+    const n = r.admin.sinPermisos;
     items.push({
-      id: "usuarios-sin-rol",
+      id: "usuarios-sin-permisos",
       tono: "azul",
       cifra: { tipo: "numero", valor: n },
-      titulo: `${plural(n, "Usuario", "Usuarios")} sin rol asignado`,
-      detalle: "No ven ningún proceso hasta que les asignes uno",
-      accion: { label: "Asignar roles", href: "/admin/usuarios" },
+      titulo: `${plural(n, "Usuario", "Usuarios")} sin permisos`,
+      detalle: "No ven ningún proceso hasta que les des acceso a uno",
+      accion: { label: "Asignar permisos", href: "/admin/usuarios" },
     });
   }
   return items;
@@ -139,22 +137,21 @@ function cifraProceso(r: ResumenInicio, ahora: Date) {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  if (!data?.claims?.sub) redirect("/login");
-  const roles = await getUserRoles(data.claims.sub);
+  // Inicio no es un proceso: basta la sesión; cada bloque se filtra por permisos.
+  const sesion = await requireSesion();
+  const { permisos } = sesion;
   // Ingresos primero: es donde viven las cifras y los pendientes medibles.
-  const areas = filterAreas(roles, AREAS)
+  const areas = filterAreas(permisos, AREAS)
     .filter((a) => !a.enMenuUsuario)
     .sort((a, b) => Number(b.slug === "ingresos") - Number(a.slug === "ingresos"));
 
-  if (areas.length === 0 && !isAdmin(roles)) {
+  if (areas.length === 0 && !permisos.esAdmin) {
     return (
       <PageTransition>
         <EmptyState
           icon={<LayoutDashboard className="size-7" />}
           title="Aún no tienes procesos asignados"
-          description="Cuando un administrador te asigne un rol, aparecerán aquí los procesos a los que tienes acceso."
+          description="Cuando un administrador te dé acceso a un proceso, aparecerá aquí."
           action={
             <Button asChild variant="outline" size="sm">
               <Link href="/documentacion">Ver la documentación</Link>
@@ -166,13 +163,11 @@ export default async function DashboardPage() {
   }
 
   const ahora = ahoraBogota();
-  const resumen = await resumenInicio(roles, ahora);
+  const resumen = await resumenInicio(permisos, ahora);
   const items = itemsAtencion(resumen);
-  // Solo hay bandeja si algún rol aporta pendientes que se puedan medir.
+  // Solo hay bandeja si algún proceso aporta pendientes que se puedan medir.
   const conBandeja = resumen.anticipos !== undefined || resumen.admin !== undefined;
-  const email = (data.claims.email as string | undefined) ?? "";
-  const nombre =
-    ((data.claims.user_metadata?.name as string | undefined) || email.split("@")[0] || "").split(" ")[0];
+  const nombre = sesion.nombre.split(" ")[0];
   const fechaLarga = FECHA.format(ahora);
   const fecha = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);
 

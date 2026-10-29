@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { createClient } from "@/lib/supabase/server";
+import { autorizar } from "@/lib/auth/acceso";
+import { PROCESOS } from "@/lib/auth/permisos-shared";
 import type { Json } from "@/types/supabase";
 
 import {
@@ -58,7 +59,9 @@ export interface ComisionesData {
 }
 
 export async function getComisionesData(): Promise<ComisionesData> {
-  const supabase = await createClient();
+  const acceso = await autorizar(PROCESOS.CALCULO_COMISIONES, "ver");
+  if (!acceso.ok) throw new Error(acceso.error);
+  const { supabase } = acceso;
 
   const [conceptosRes, valoresRes, basesRes, reconRes, registradosRes, cierresRes] = await Promise.all([
     supabase
@@ -134,16 +137,6 @@ export async function getComisionesData(): Promise<ComisionesData> {
   };
 }
 
-async function authed() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return { supabase, user };
-}
-
-const SESION_EXPIRADA = "Tu sesión expiró. Vuelve a iniciar sesión.";
-
 function dbError(message: string, code?: string): string {
   if (code === "23505") return "Ya existe un concepto con ese nombre.";
   if (code === "42501") return "No tienes permisos para modificar comisiones.";
@@ -160,8 +153,9 @@ function primerError(error: z.ZodError, fallback: string): string {
 export async function crearConcepto(nombre: string): Promise<ActionResult<Concepto>> {
   const parsed = nombreSchema.safeParse(nombre);
   if (!parsed.success) return { ok: false, error: primerError(parsed.error, "Nombre inválido") };
-  const { supabase, user } = await authed();
-  if (!user) return { ok: false, error: SESION_EXPIRADA };
+  const acceso = await autorizar(PROCESOS.CALCULO_COMISIONES, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const { data: last } = await supabase
     .schema("comisiones").from("conceptos")
@@ -204,8 +198,9 @@ export async function actualizarConcepto(
   }
   if (patch.activo !== undefined) update.activo = patch.activo;
 
-  const { supabase, user } = await authed();
-  if (!user) return { ok: false, error: SESION_EXPIRADA };
+  const acceso = await autorizar(PROCESOS.CALCULO_COMISIONES, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const { error } = await supabase.schema("comisiones").from("conceptos").update(update).eq("id", id);
   if (error) return { ok: false, error: dbError(error.message, error.code) };
@@ -226,8 +221,9 @@ export async function guardarValores(
   }
   if (valores.length === 0) return { ok: true, data: undefined };
 
-  const { supabase, user } = await authed();
-  if (!user) return { ok: false, error: SESION_EXPIRADA };
+  const acceso = await autorizar(PROCESOS.CALCULO_COMISIONES, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase, userId } = acceso;
 
   const now = new Date().toISOString();
   const { error } = await supabase.schema("comisiones").from("periodo_valores").upsert(
@@ -236,7 +232,7 @@ export async function guardarValores(
       concepto_id: v.conceptoId,
       valor: Math.round(v.valor * 100) / 100,
       updated_at: now,
-      updated_by: user.id,
+      updated_by: userId,
     })),
     { onConflict: "periodo,concepto_id" },
   );
@@ -258,8 +254,9 @@ export async function guardarBase(base: BasePeriodo): Promise<ActionResult> {
     if (!parsed.success) return { ok: false, error: primerError(parsed.error, "Valor inválido") };
   }
 
-  const { supabase, user } = await authed();
-  if (!user) return { ok: false, error: SESION_EXPIRADA };
+  const acceso = await autorizar(PROCESOS.CALCULO_COMISIONES, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase, userId } = acceso;
 
   const { error } = await supabase.schema("comisiones").from("bases").upsert(
     {
@@ -268,7 +265,7 @@ export async function guardarBase(base: BasePeriodo): Promise<ActionResult> {
       facturas: Math.round(base.facturas * 100) / 100,
       notas_credito: Math.round(base.notasCredito * 100) / 100,
       updated_at: new Date().toISOString(),
-      updated_by: user.id,
+      updated_by: userId,
     },
     { onConflict: "periodo,prefijo" },
   );
@@ -315,8 +312,9 @@ export async function guardarCierre(input: GuardarCierreInput): Promise<ActionRe
     return { ok: false, error: "El informe trae facturas posteriores al periodo." };
   }
 
-  const { supabase, user } = await authed();
-  if (!user) return { ok: false, error: SESION_EXPIRADA };
+  const acceso = await autorizar(PROCESOS.CALCULO_COMISIONES, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const { error } = await supabase.schema("comisiones").rpc("guardar_cierre", {
     p_periodo: p.data,
@@ -346,8 +344,9 @@ export async function eliminarCierre(periodo: string): Promise<ActionResult> {
   const p = periodoSchema.safeParse(periodo);
   if (!p.success) return { ok: false, error: "Periodo inválido" };
 
-  const { supabase, user } = await authed();
-  if (!user) return { ok: false, error: SESION_EXPIRADA };
+  const acceso = await autorizar(PROCESOS.CALCULO_COMISIONES, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const { error } = await supabase.schema("comisiones").from("cierres").delete().eq("periodo", p.data);
   if (error) return { ok: false, error: dbError(error.message, error.code) };

@@ -8,6 +8,7 @@ import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Nivel } from "@/lib/auth/permisos-shared";
 import { cn } from "@/lib/utils";
 import { ordenColumnas, type CampoCatalogo, type Plantilla } from "@/lib/netsuite/campos";
 import {
@@ -99,7 +100,8 @@ interface ExportBancosPageClientProps {
   hoy: string;
   campos: CampoCatalogo[];
   plantillas: Plantilla[];
-  esAdmin: boolean;
+  /** Nivel en el proceso: `ver` exporta, `usar` edita plantillas, `gestionar` el catálogo. */
+  nivel: Nivel;
   /** Error al leer el catálogo (p. ej. migración sin aplicar). */
   errorCampos: string | null;
 }
@@ -111,7 +113,7 @@ export function ExportBancosPageClient({
   hoy,
   campos,
   plantillas,
-  esAdmin,
+  nivel,
   errorCampos,
 }: ExportBancosPageClientProps) {
   const [fechaInicio, setFechaInicio] = useState(rangoInicial.inicio);
@@ -430,7 +432,8 @@ export function ExportBancosPageClient({
           <CamposCard
             campos={campos}
             plantillas={plantillas}
-            esAdmin={esAdmin}
+            puedeGestionar={nivel === "gestionar"}
+            puedeEditarPlantillas={nivel !== "ver"}
             seleccion={seleccion}
             onSeleccionChange={setSeleccion}
             filtros={filtros}

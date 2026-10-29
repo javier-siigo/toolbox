@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 const PUBLIC_PATHS = new Set<string>(["/login"]);
 // /api/cron se autentica con CRON_SECRET dentro de la ruta.
 const PUBLIC_PREFIXES = ["/api/public", "/api/cron", "/_next", "/favicon", "/icons"];
-const SEEN_COOKIE = "siico_seen";
+const SEEN_COOKIE = "toolbox_seen";
 const SEEN_INTERVAL_SECONDS = 5 * 60;
 
 /**

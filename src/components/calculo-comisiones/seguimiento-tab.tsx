@@ -52,7 +52,8 @@ interface SeguimientoTabProps {
   datos: DatosComisiones;
   cierres: CierreGuardado[];
   onAbrir: (periodo: string) => void;
-  onEliminar: (periodo: string) => Promise<void>;
+  /** Sin handler (nivel `ver`) no se ofrece eliminar. */
+  onEliminar?: (periodo: string) => Promise<void>;
 }
 
 export function SeguimientoTab({ datos, cierres, onAbrir, onEliminar }: SeguimientoTabProps) {
@@ -136,17 +137,19 @@ export function SeguimientoTab({ datos, cierres, onAbrir, onEliminar }: Seguimie
                           >
                             <ArrowRight className="size-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className={cn(
-                              "size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
-                            )}
-                            aria-label={`Eliminar cierre de ${periodoLabel(c.periodo)}`}
-                            onClick={() => setConfirmar(c.periodo)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                          {onEliminar && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={cn(
+                                "size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
+                              )}
+                              aria-label={`Eliminar cierre de ${periodoLabel(c.periodo)}`}
+                              onClick={() => setConfirmar(c.periodo)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -176,7 +179,7 @@ export function SeguimientoTab({ datos, cierres, onAbrir, onEliminar }: Seguimie
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                if (confirmar) void onEliminar(confirmar);
+                if (confirmar) void onEliminar?.(confirmar);
                 setConfirmar(null);
               }}
             >

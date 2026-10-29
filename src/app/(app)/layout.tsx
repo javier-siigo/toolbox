@@ -1,35 +1,17 @@
-import { redirect } from "next/navigation";
-
 import { AppShell } from "@/components/layout/app-shell";
-import { getUserRoles } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { requireSesion } from "@/lib/auth/acceso";
 
+// Solo arma el menú con los permisos del usuario. No protege nada: los layouts no se
+// re-ejecutan al navegar; cada página llama a `requireAcceso` (ver lib/auth/acceso.ts).
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let user = { name: "Invitado", email: "" };
-  let roles = { roles: [] as string[], paises: [] as string[] };
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase.auth.getClaims();
-    if (error || !data?.claims) {
-      redirect("/login");
-    }
-    const email = (data.claims.email as string | undefined) ?? "";
-    const name =
-      (data.claims.user_metadata?.name as string | undefined) ||
-      email.split("@")[0] ||
-      "Usuario";
-    user = { name, email };
-    roles = await getUserRoles(data.claims.sub as string);
-  } catch {
-    redirect("/login");
-  }
+  const { nombre, email, permisos } = await requireSesion();
 
   return (
-    <AppShell user={user} roles={roles}>
+    <AppShell user={{ name: nombre, email }} permisos={permisos}>
       {children}
     </AppShell>
   );

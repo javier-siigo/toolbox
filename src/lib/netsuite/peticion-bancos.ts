@@ -2,8 +2,8 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
-import { getUserRoles, hasIngresosOrAdmin } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { autorizar, respuestaDenegada, type Sesion } from "@/lib/auth/acceso";
+import { PROCESOS } from "@/lib/auth/permisos-shared";
 
 import type { CampoCatalogo } from "./campos";
 import { NetSuiteError } from "./client";
@@ -32,22 +32,15 @@ export function esUuid(value: unknown): value is string {
 
 type Resultado<T> = { ok: true; data: T } | { ok: false; response: NextResponse };
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
+type Supabase = Sesion["supabase"];
 
-/** Sesión con rol ingresos o admin y cuerpo JSON (objeto). */
+/** Sesión con acceso a la exportación (basta `ver`: exportar no modifica nada) y cuerpo JSON. */
 export async function leerSesion(request: Request): Promise<
   Resultado<{ supabase: Supabase; userId: string; body: Record<string, unknown> }>
 > {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) {
-    return { ok: false, response: jsonError("Tu sesión expiró. Vuelve a iniciar sesión.", "unauthorized", 401) };
-  }
-  const userId = data.claims.sub;
-  const roles = await getUserRoles(userId);
-  if (!hasIngresosOrAdmin(roles)) {
-    return { ok: false, response: jsonError("No tienes permisos para esta exportación.", "forbidden", 403) };
-  }
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "ver");
+  if (!acceso.ok) return { ok: false, response: respuestaDenegada(acceso) };
+  const { supabase, userId } = acceso;
 
   let body: unknown;
   try {

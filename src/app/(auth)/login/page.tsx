@@ -19,8 +19,8 @@ export default function LoginPage() {
                   <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                     <Calculator className="h-4 w-4" />
                   </span>
-                  <span className="font-mono text-sm font-semibold tracking-[0.14em]">
-                    SIICO
+                  <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">
+                    Toolbox
                   </span>
                 </div>
 

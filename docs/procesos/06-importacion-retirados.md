@@ -46,7 +46,7 @@ Las filas sin cédula numérica positiva o sin nombre se descartan en silencio.
 
 ### Permisos (versión web)
 
-`importarRetiradosAction` (`src/lib/retirados/actions.ts`): exige sesión y rol `admin` o `ingresos`; la escritura se hace con el **cliente admin** (se salta RLS). Al terminar revalida `/ingresos/gestion-anticipos`.
+`importarRetiradosAction` (`src/lib/retirados/actions.ts`): exige nivel `usar` en Gestión de anticipos (`autorizar(PROCESOS.GESTION_ANTICIPOS, "usar")`); la escritura se hace con el **cliente admin** (se salta RLS). Al terminar revalida `/ingresos/gestion-anticipos`.
 
 ### Script CLI
 

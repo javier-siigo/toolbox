@@ -1,5 +1,5 @@
 ---
-name: SIICO Portal
+name: Toolbox Portal
 description: Operations console for Siigo's accounting automation catalog and operational data views.
 colors:
   primary: oklch(0.6 0.17 235)
@@ -146,13 +146,13 @@ components:
     padding: "0 0.5rem"
 ---
 
-# Design System: SIICO Portal
+# Design System: Toolbox Portal
 
 ## Overview
 
 **Creative North Star: "The Operations Console in Siigo Blue."**
 
-SIICO's portal is a working console for the Siigo accounting team — a place to dispatch automations, audit their outcomes, and operate on tabular data without leaving the browser. The visual language borrows from engineering and accounting tooling (issue trackers, ERP tables, terminal UIs): typography carries weight, borders carry structure, and Siigo blue owns the chrome while a cool gray canvas plus white cards carry the work. Density still wins over breathing room; every pixel should help a counter answer "what is the status of this run?" or "where is this anticipo?" without scrolling for context.
+Toolbox's portal is a working console for the Siigo accounting team — a place to dispatch automations, audit their outcomes, and operate on tabular data without leaving the browser. The visual language borrows from engineering and accounting tooling (issue trackers, ERP tables, terminal UIs): typography carries weight, borders carry structure, and Siigo blue owns the chrome while a cool gray canvas plus white cards carry the work. Density still wins over breathing room; every pixel should help a counter answer "what is the status of this run?" or "where is this anticipo?" without scrolling for context.
 
 The system is bilingual in form (light/dark themes over the same tokens via Tailwind v4's `@custom-variant dark`) but monolingual in voice (Spanish UI). It runs on Tailwind v4's CSS-first tokens and shadcn/ui's `new-york` primitives, with IBM Plex Sans and IBM Plex Mono as the only typefaces. Light and dark themes are not equals aesthetically — light is the working canvas for daytime data entry, dark is the after-hours and reduced-glare default — but neither is louder than the other.
 
@@ -209,7 +209,7 @@ Introduced by the commission close (`calculo-comisiones`), where a multi-step mo
 ### Sidebar
 
 - **Siigo Blue** (`oklch(0.6 0.17 235)` in light, `oklch(0.26 0.13 235)` in dark): The sidebar background — the brand voice owns the rail. White text and white-tinted dividers give the chrome a clean, on-brand feel without losing readability.
-- **Sidebar Primary** (`oklch(1 0 0)` in light, `oklch(0.96 0.005 247)` in dark): Used for the SIICO mark tile in the sidebar header. Inverted relative to sidebar background so the logo reads as a "lifted" surface on the brand blue.
+- **Sidebar Primary** (`oklch(1 0 0)` in light, `oklch(0.96 0.005 247)` in dark): Used for the Toolbox mark tile in the sidebar header. Inverted relative to sidebar background so the logo reads as a "lifted" surface on the brand blue.
 - **Sidebar Accent** (`oklch(0.52 0.18 235)` in light, `oklch(0.34 0.15 235)` in dark): The hover/active wash. Deeper Siigo blue that still sits on the same hue so selection stays clearly inside the brand family.
 - **Sidebar Border** (`oklch(1 0 0 / 0.14)` in light, `oklch(1 0 0 / 0.10)` in dark): White-tinted dividers visible against the blue chrome.
 
@@ -217,7 +217,7 @@ Introduced by the commission close (`calculo-comisiones`), where a multi-step mo
 
 **The Three-Zone Contrast Rule.** Every screen is composed of three concentric layers — Siigo blue sidebar, gray canvas, white cards. Each layer earns its color from its job: brand voice, work surface, container. Don't collapse two layers into the same color.
 
-**The One-Voice Rule.** Siigo blue appears in roughly ≤10% of any given viewport (plus the sidebar, which earns its color from being brand chrome). It speaks for primary actions, the SIICO mark, and focus rings. It never co-occurs with another bright fill on the same screen — a Siigo blue button next to a coral destructive button on the same row breaks the rule.
+**The One-Voice Rule.** Siigo blue appears in roughly ≤10% of any given viewport (plus the sidebar, which earns its color from being brand chrome). It speaks for primary actions, the Toolbox mark, and focus rings. It never co-occurs with another bright fill on the same screen — a Siigo blue button next to a coral destructive button on the same row breaks the rule.
 
 **The Chart-Only Hue Rule.** Hues other than Siigo blue exist exclusively inside data viz (chart slots 2–5 and KPI tone chips). Emerald/amber/sky/rose tones are status colors, not decorative accents; do not promote them into brand surfaces. Two functional extensions are allowed: wayfinding state (amber = current, emerald = done) and a fixed data-category mapping (sky = ingreso, emerald = gasto), each defined once and applied identically everywhere it appears.
 
@@ -232,7 +232,7 @@ Introduced by the commission close (`calculo-comisiones`), where a multi-step mo
 **Display Font:** Not used. Per PRODUCT.md, display typography is explicitly excluded.
 **Body Font:** IBM Plex Sans (weights 400, 500, 600, 700), loaded via `next/font/google` as the `--font-plex-sans` CSS variable in `src/app/layout.tsx`. Fallback: `ui-sans-serif, system-ui, sans-serif`.
 **Label Font:** IBM Plex Sans, semibold, uppercase, tracked.
-**Mono Font:** IBM Plex Mono (weights 400, 500, 600), loaded via `next/font/google` as the `--font-plex-mono` CSS variable. Reserved for tabular numerics, codes (requerimiento identifiers), the SIICO brand mark, the 404 marker, and KPI values.
+**Mono Font:** IBM Plex Mono (weights 400, 500, 600), loaded via `next/font/google` as the `--font-plex-mono` CSS variable. Reserved for tabular numerics, codes (requerimiento identifiers), the Toolbox brand mark, the 404 marker, and KPI values.
 
 **Character:** Plex Sans reads as engineering documentation — slightly humanist, optically distinct at small sizes, and serious without feeling cold. Plex Mono is its workhorse sibling, used wherever a number or code needs to line up with another number or code. The pairing is intentionally narrow: no third typeface, no display weights, no italic flourishes. `font-feature-settings: "ss01", "cv11"` is enabled globally on `<body>` so the open `4`, `6`, and `9` inktraps stay legible across the data tables.
 
@@ -241,7 +241,7 @@ Introduced by the commission close (`calculo-comisiones`), where a multi-step mo
 - **Title** (semibold 600, 16px / `1rem`, line-height 1.25, slight negative tracking `-0.005em`): Page titles, card titles, dialog titles. Used at `text-base font-semibold leading-none tracking-tight` in shadcn primitives like `CardTitle`. Never scales up to display sizes — if a surface needs more weight, it adds color or borders instead.
 - **Body** (regular 400, 14px / `0.875rem`, line-height 1.5): Default prose. Used for form labels, descriptions, table cells, button text, sidebar menu items.
 - **Label** (semibold 600, 11px / `0.6875rem`, line-height 1, letter-spacing `0.06em`, uppercase): Column headers in tables, sidebar group labels (`ÁREAS`), KPI tile labels, dropdown section labels, eyebrow text in the topbar. Always uppercase and tracked; never mixed-case.
-- **Mono** (medium 500, 14px / `0.875rem`, tabular-nums): The mono variant is used selectively for tabular numerics (KPI values, dates, requerimiento codes), the SIICO mark in the login card and the 404 marker, and `font-variant-numeric: tabular-nums` on every table cell (set via `[data-slot="table"]` in `globals.css`). Numeric alignment matters more than decoration.
+- **Mono** (medium 500, 14px / `0.875rem`, tabular-nums): The mono variant is used selectively for tabular numerics (KPI values, dates, requerimiento codes), the Toolbox mark in the login card and the 404 marker, and `font-variant-numeric: tabular-nums` on every table cell (set via `[data-slot="table"]` in `globals.css`). Numeric alignment matters more than decoration.
 
 ### Named Rules
 
@@ -389,7 +389,7 @@ Source: `src/components/ui/input.tsx`.
 ### Navigation
 
 - **Topbar (`src/components/layout/topbar.tsx`):** `h-14` sticky, `border-b border-border`, `bg-card` (solid white panel, not translucent — the topbar is part of the content well, not a layer floating above the gray canvas). Left side: sidebar trigger + breadcrumb (eyebrow + title). Right side: theme toggle + user menu.
-- **Sidebar (`src/components/layout/app-sidebar.tsx`, primitives in `src/components/ui/sidebar.tsx`):** `w-[16rem]` persistent on `md+`, offcanvas Sheet on mobile. `bg-sidebar` (Siigo blue `oklch(0.6 0.17 235)` in light, deep Siigo blue `oklch(0.26 0.13 235)` in dark) — the brand voice owns the rail. Header holds the SIICO mark tile (`size-8` square, `bg-sidebar-primary` white fill in light / near-white in dark, dashboard icon in `text-sidebar-primary-foreground` Siigo blue, `shadow-sm`) + a two-line "SIICO / Portal contable" label (`text-sm font-semibold` + `text-[11px] text-sidebar-foreground/70`). Footer holds the user card (avatar + name + email) on a white-tinted panel (`bg-white/10` + `border-white/15`) so it reads as a separate surface inside the blue chrome.
+- **Sidebar (`src/components/layout/app-sidebar.tsx`, primitives in `src/components/ui/sidebar.tsx`):** `w-[16rem]` persistent on `md+`, offcanvas Sheet on mobile. `bg-sidebar` (Siigo blue `oklch(0.6 0.17 235)` in light, deep Siigo blue `oklch(0.26 0.13 235)` in dark) — the brand voice owns the rail. Header holds the Toolbox mark tile (`size-8` square, `bg-sidebar-primary` white fill in light / near-white in dark, dashboard icon in `text-sidebar-primary-foreground` Siigo blue, `shadow-sm`) + a two-line "Toolbox / Portal contable" label (`text-sm font-semibold` + `text-[11px] text-sidebar-foreground/70`). Footer holds the user card (avatar + name + email) on a white-tinted panel (`bg-white/10` + `border-white/15`) so it reads as a separate surface inside the blue chrome.
 - **Sidebar menu item:** `rounded-md` (6px), `h-8` (32px), `p-2`, full-width. Icon + label + (optional) chevron. Hover fills with `--sidebar-accent`. Active state uses `data-active=true` to apply `--sidebar-accent` + semibold weight + `--sidebar-accent-foreground`. Group-active (a collapsible has a child active but the trigger itself is collapsed) uses `--sidebar-accent/60` for a softer hint.
 - **Sub-menu item:** `text-xs`, indented under the parent, separated by a 1px `--sidebar-border` left rail (white-tinted divider). Same hover/focus treatment, no chevron.
 - **Group label:** `text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/70`. White at 70% opacity — quieter than the menu items above it so the eye lands on the items first.
@@ -400,7 +400,7 @@ Source: `src/components/ui/input.tsx`.
 - **KPI Tile (`KpiTile` in `src/components/anticipos/anticipos-page.tsx`):** A horizontal card with a colored icon chip on the left and a two-line stack on the right. Icon chip is `size-9 rounded-md border` filled with a tone class (`bg-primary/10` + `text-primary` + `border-primary/15` for the default tone; emerald/amber/rose for status tones). Label is `text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`. Value is `font-mono text-xl font-semibold tabular-nums text-foreground`; an optional suffix slot (`tasaLegalizacion` style) renders muted mono text right of the value.
 - **Column header with sort (`DataTableColumnHeader`):** A two-column flex — uppercase label on the left, sort button on the right. Sort button is `size-6 ghost icon` with `ArrowUpDown` (idle, `opacity-60`), `ArrowUp`, or `ArrowDown` depending on sort state.
 - **Empty state (`Empty` + `EmptyHeader` + `EmptyMedia` + `EmptyTitle` + `EmptyDescription`):** Centered column with a dashed border, optional `size-10 rounded-full border bg-muted` icon container, title at `text-sm font-semibold text-foreground`, description at `text-sm text-muted-foreground`. Wrapped in a Card with `border-0 bg-transparent` when shown inside the data table so the table's border carries the structure.
-- **Login card:** A `rounded-lg border bg-card` with `p-8 sm:p-10`. The SIICO mark uses `font-mono text-sm font-semibold tracking-[0.14em]` — the only place in the portal where the brand mark is set in mono at a wider tracking than labels. The footer caption below the card is `font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground/70` — even quieter than group labels.
+- **Login card:** A `rounded-lg border bg-card` with `p-8 sm:p-10`. The Toolbox mark uses `font-mono text-sm font-semibold tracking-[0.14em]` — the only place in the portal where the brand mark is set in mono at a wider tracking than labels. The footer caption below the card is `font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground/70` — even quieter than group labels.
 
 ### Wayfinding (stepped process)
 

@@ -26,12 +26,12 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import type { UserRolesInfo } from "@/lib/auth/roles-shared";
-import { filterAreas } from "@/lib/auth/roles-shared";
+import type { Permisos } from "@/lib/auth/permisos-shared";
+import { filterAreas } from "@/lib/auth/permisos-shared";
 import { FlagIcon } from "@/lib/flags";
 import { AREAS, procesoHref } from "@/lib/navigation";
 
-const OPEN_AREAS_KEY = "siico:sidebar-areas-open";
+const OPEN_AREAS_KEY = "toolbox:sidebar-areas-open";
 
 function readOpenAreas(): Record<string, boolean> {
   if (typeof window === "undefined") return {};
@@ -62,11 +62,11 @@ function getInitials(name: string): string {
 
 interface AppSidebarProps {
   user: { name: string; email: string };
-  roles: UserRolesInfo;
+  permisos: Permisos;
 }
 
-export function AppSidebar({ user, roles }: AppSidebarProps) {
-  const visibleAreas = filterAreas(roles, AREAS).filter((a) => !a.enMenuUsuario);
+export function AppSidebar({ user, permisos }: AppSidebarProps) {
+  const visibleAreas = filterAreas(permisos, AREAS).filter((a) => !a.enMenuUsuario);
   const pathname = usePathname();
   const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
   const [hydrated, setHydrated] = useState(false);
@@ -104,7 +104,7 @@ export function AppSidebar({ user, roles }: AppSidebarProps) {
             <SidebarMenuButton
               asChild
               size="lg"
-              tooltip="SIICO · Portal contable"
+              tooltip="Toolbox · Portal contable"
               className="data-[active=true]:bg-transparent"
             >
               <Link href="/dashboard" transitionTypes={pathname !== "/dashboard" ? ["nav-back"] : undefined}>
@@ -112,7 +112,7 @@ export function AppSidebar({ user, roles }: AppSidebarProps) {
                   <LayoutDashboard className="size-4" />
                 </span>
                 <div className="flex min-w-0 flex-col leading-tight">
-                  <span className="truncate text-sm font-semibold">SIICO</span>
+                  <span className="truncate text-sm font-semibold">Toolbox</span>
                   <span className="truncate text-[11px] text-sidebar-foreground/70">
                     Portal contable
                   </span>
@@ -227,7 +227,7 @@ export function AppSidebar({ user, roles }: AppSidebarProps) {
                 {user.name}
               </span>
               <span className="truncate text-[11px] text-sidebar-foreground/70">
-                {user.email || "SIICO · v0.1"}
+                {user.email || "Toolbox · v0.1"}
               </span>
             </div>
           </div>

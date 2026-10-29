@@ -462,6 +462,62 @@ export type Database = {
   }
   core: {
     Tables: {
+      permisos: {
+        Row: {
+          nivel: Database["core"]["Enums"]["nivel_acceso"]
+          otorgado_at: string
+          otorgado_por: string | null
+          proceso_id: string
+          user_id: string
+        }
+        Insert: {
+          nivel?: Database["core"]["Enums"]["nivel_acceso"]
+          otorgado_at?: string
+          otorgado_por?: string | null
+          proceso_id: string
+          user_id: string
+        }
+        Update: {
+          nivel?: Database["core"]["Enums"]["nivel_acceso"]
+          otorgado_at?: string
+          otorgado_por?: string | null
+          proceso_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permisos_proceso_id_fkey"
+            columns: ["proceso_id"]
+            isOneToOne: false
+            referencedRelation: "procesos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      procesos: {
+        Row: {
+          activo: boolean
+          area: string
+          id: string
+          nombre: string
+          pais: string | null
+        }
+        Insert: {
+          activo?: boolean
+          area: string
+          id: string
+          nombre: string
+          pais?: string | null
+        }
+        Update: {
+          activo?: boolean
+          area?: string
+          id?: string
+          nombre?: string
+          pais?: string | null
+        }
+        Relationships: []
+      }
       user_activity: {
         Row: {
           last_seen_at: string
@@ -498,11 +554,35 @@ export type Database = {
         }
         Relationships: []
       }
+      usuarios: {
+        Row: {
+          es_admin: boolean
+          user_id: string
+        }
+        Insert: {
+          es_admin?: boolean
+          user_id: string
+        }
+        Update: {
+          es_admin?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      guardar_permisos: {
+        Args: {
+          p_es_admin: boolean
+          p_otorgado_por: string
+          p_permisos: Json
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       storage_archivos_vencidos: {
         Args: { p_antes: string; p_buckets: string[] }
         Returns: {
@@ -513,7 +593,7 @@ export type Database = {
       touch_last_seen: { Args: never; Returns: undefined }
     }
     Enums: {
-      [_ in never]: never
+      nivel_acceso: "ver" | "usar" | "gestionar"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -816,7 +896,9 @@ export const Constants = {
     Enums: {},
   },
   core: {
-    Enums: {},
+    Enums: {
+      nivel_acceso: ["ver", "usar", "gestionar"],
+    },
   },
   export_bancos: {
     Enums: {},

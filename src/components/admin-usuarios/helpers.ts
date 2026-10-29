@@ -1,55 +1,38 @@
-import { AREAS } from "@/lib/navigation";
-import { ROLE_CONCILIACIONES, filterAreas } from "@/lib/auth/roles-shared";
+import { AREAS, type Area } from "@/lib/navigation";
+import {
+  NIVELES,
+  NIVEL_META,
+  filterAreas,
+  type Nivel,
+  type Permisos,
+  type ProcesoId,
+} from "@/lib/auth/permisos-shared";
+import type { UsuarioConPermisos } from "@/lib/admin/users";
 
-export interface AdminUser {
-  id: string;
-  email: string;
-  roles: string[];
-  paises: string[];
-  lastSignInAt: string | null;
-  /** Última request con sesión (tabla `user_activity`, se escribe cada ≥5 min). */
-  lastSeenAt: string | null;
+export type AdminUser = UsuarioConPermisos;
+
+/** Lo que se edita en la hoja lateral: mismo formato que los permisos del servidor. */
+export type Draft = Permisos;
+
+export const EMPTY_DRAFT: Draft = { esAdmin: false, procesos: {} };
+
+/** Áreas con procesos que tienen permisos propios (las que aparecen en el editor). */
+export const AREAS_CON_PERMISOS: Area[] = AREAS.map((a) => ({
+  ...a,
+  procesos: a.procesos.filter((p) => p.id),
+})).filter((a) => a.procesos.length > 0);
+
+const NOMBRE_PROCESO = new Map<ProcesoId, string>(
+  AREAS_CON_PERMISOS.flatMap((a) => a.procesos.map((p) => [p.id!, p.label] as const)),
+);
+
+export function nombreProceso(id: ProcesoId): string {
+  return NOMBRE_PROCESO.get(id) ?? id;
 }
-
-export interface Draft {
-  roles: string[];
-  paises: string[];
-}
-
-export const EMPTY_DRAFT: Draft = { roles: [], paises: [] };
-
-export const ROLE_META: Record<string, { label: string; description: string }> = {
-  admin: {
-    label: "Admin",
-    description: "Ve todas las áreas y gestiona usuarios y roles.",
-  },
-  conciliaciones: {
-    label: "Conciliaciones",
-    description: "Conciliación contable de los países que asignes.",
-  },
-  ingresos: {
-    label: "Ingresos",
-    description: "Anticipos, notas crédito, comisiones y bancos.",
-  },
-};
-
-export const PAIS_LABEL: Record<string, string> = {
-  CO: "Colombia",
-  MX: "México",
-  UY: "Uruguay",
-  CL: "Chile",
-  EC: "Ecuador",
-};
 
 const DAY = 86_400_000;
 
-/** Usuario con registro en `user_roles` pero sin cuenta en Supabase Auth. */
-export function isOrphan(user: Pick<AdminUser, "email">) {
-  return !user.email.includes("@");
-}
-
 export function displayName(email: string) {
-  if (!email.includes("@")) return "Usuario huérfano";
   return (email.split("@")[0] ?? email)
     .split(/[._-]/)
     .filter(Boolean)
@@ -58,7 +41,6 @@ export function displayName(email: string) {
 }
 
 export function initials(email: string) {
-  if (!email.includes("@")) return "?";
   const parts = (email.split("@")[0] ?? "").split(/[._-]/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
@@ -97,51 +79,56 @@ export function isInactive(iso: string | null) {
 }
 
 /** Problemas de configuración que el admin debería resolver. */
-export function issuesFor(user: Pick<AdminUser, "email">, d: Draft): string[] {
-  const out: string[] = [];
-  if (isOrphan(user)) out.push("Sin cuenta en Auth");
-  else if (d.roles.length === 0) out.push("Sin roles");
-  if (d.roles.includes(ROLE_CONCILIACIONES) && d.paises.length === 0)
-    out.push("Conciliaciones sin países");
-  return out;
+export function issuesFor(d: Draft): string[] {
+  if (d.esAdmin || Object.keys(d.procesos).length > 0) return [];
+  return ["Sin permisos"];
 }
 
 export function accessFor(d: Draft) {
   return filterAreas(d, AREAS).filter((a) => a.slug !== "documentacion");
 }
 
-function sameSet(a: string[], b: string[]) {
-  return a.length === b.length && a.every((x) => b.includes(x));
-}
-
 export function isDirty(initial: Draft, current: Draft) {
-  return !sameSet(initial.roles, current.roles) || !sameSet(initial.paises, current.paises);
+  if (initial.esAdmin !== current.esAdmin) return true;
+  const ids = new Set([...Object.keys(initial.procesos), ...Object.keys(current.procesos)]) as Set<ProcesoId>;
+  for (const id of ids) if (initial.procesos[id] !== current.procesos[id]) return true;
+  return false;
 }
 
 export function diffLabels(initial: Draft, current: Draft) {
-  const out: { sign: "+" | "−"; label: string }[] = [];
-  for (const r of current.roles)
-    if (!initial.roles.includes(r)) out.push({ sign: "+", label: ROLE_META[r]?.label ?? r });
-  for (const r of initial.roles)
-    if (!current.roles.includes(r)) out.push({ sign: "−", label: ROLE_META[r]?.label ?? r });
-  for (const p of current.paises)
-    if (!initial.paises.includes(p)) out.push({ sign: "+", label: PAIS_LABEL[p] ?? p });
-  for (const p of initial.paises)
-    if (!current.paises.includes(p)) out.push({ sign: "−", label: PAIS_LABEL[p] ?? p });
+  const out: { sign: "+" | "−" | "~"; label: string }[] = [];
+  if (!initial.esAdmin && current.esAdmin) out.push({ sign: "+", label: "Admin" });
+  if (initial.esAdmin && !current.esAdmin) out.push({ sign: "−", label: "Admin" });
+  const ids = new Set([...Object.keys(initial.procesos), ...Object.keys(current.procesos)]) as Set<ProcesoId>;
+  for (const id of ids) {
+    const antes = initial.procesos[id];
+    const ahora = current.procesos[id];
+    if (antes === ahora) continue;
+    const nombre = nombreProceso(id);
+    if (!antes) out.push({ sign: "+", label: `${nombre} · ${NIVEL_META[ahora!].label}` });
+    else if (!ahora) out.push({ sign: "−", label: nombre });
+    else out.push({ sign: "~", label: `${nombre}: ${NIVEL_META[antes].label} → ${NIVEL_META[ahora].label}` });
+  }
   return out;
 }
 
-export function toggleRoleIn(d: Draft, role: string): Draft {
-  const has = d.roles.includes(role);
-  const roles = has ? d.roles.filter((r) => r !== role) : [...d.roles, role];
-  const paises = has && role === ROLE_CONCILIACIONES ? [] : d.paises;
-  return { roles, paises };
+/** `null` quita el acceso al proceso. */
+export function setNivel(d: Draft, proceso: ProcesoId, nivel: Nivel | null): Draft {
+  const procesos = { ...d.procesos };
+  if (nivel) procesos[proceso] = nivel;
+  else delete procesos[proceso];
+  return { ...d, procesos };
 }
 
-/** Marcar un país activa Conciliaciones: no tiene sentido un país sin el rol. */
-export function togglePaisIn(d: Draft, code: string): Draft {
-  const has = d.paises.includes(code);
-  const paises = has ? d.paises.filter((p) => p !== code) : [...d.paises, code];
-  const roles = d.roles.includes(ROLE_CONCILIACIONES) ? d.roles : [...d.roles, ROLE_CONCILIACIONES];
-  return { roles, paises };
+/** Atajo "toda el área": el mismo nivel (o ninguno) en todos sus procesos. */
+export function setNivelArea(d: Draft, area: Area, nivel: Nivel | null): Draft {
+  return area.procesos.reduce((acc, p) => setNivel(acc, p.id!, nivel), d);
 }
+
+/** Nivel común del área, `null` si ninguno tiene acceso, `"mixto"` si difieren. */
+export function nivelArea(d: Draft, area: Area): Nivel | null | "mixto" {
+  const niveles = new Set(area.procesos.map((p) => d.procesos[p.id!] ?? null));
+  return niveles.size === 1 ? [...niveles][0]! : "mixto";
+}
+
+export { NIVELES, NIVEL_META };

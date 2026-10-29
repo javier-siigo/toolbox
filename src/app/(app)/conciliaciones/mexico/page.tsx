@@ -1,30 +1,20 @@
-import { redirect } from "next/navigation";
-
 import { ConciliacionesPageClient } from "@/components/conciliaciones/conciliaciones-page";
 import { PageTransition } from "@/components/motion/page-transition";
+import { requireAcceso } from "@/lib/auth/acceso";
+import { PROCESOS } from "@/lib/auth/permisos-shared";
 import { getBancosPorPais } from "@/lib/conciliaciones/bancos";
-import { getUserRoles, requireProcesoAccess } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Conciliación México",
 };
 
-export default async function ConciliacionMexicoPage() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  if (!data?.claims?.sub) redirect("/login");
-  const roles = await getUserRoles(data.claims.sub);
-  await requireProcesoAccess(roles, "conciliaciones", {
-    slug: "mexico",
-    flagCode: "MX",
-  });
-
+export default async function ConciliacionPage() {
+  const { nivel } = await requireAcceso(PROCESOS.CONCILIACION_MEXICO);
   const bancos = await getBancosPorPais("MX");
 
   return (
     <PageTransition>
-      <ConciliacionesPageClient pais="MX" bancos={bancos} />
+      <ConciliacionesPageClient pais="MX" bancos={bancos} soloLectura={nivel === "ver"} />
     </PageTransition>
   );
 }

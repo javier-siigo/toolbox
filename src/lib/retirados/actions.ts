@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { autorizar } from "@/lib/auth/acceso";
+import { PROCESOS } from "@/lib/auth/permisos-shared";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { getUserRoles, hasRole, isAdmin, ROLE_INGRESOS } from "@/lib/auth/roles";
 import { importRetiradosXlsx } from "@/lib/retirados/import";
 
 export type ImportarRetiradosState = {
@@ -20,16 +20,9 @@ export async function importarRetiradosAction(
   _prev: ImportarRetiradosState | undefined,
   formData: FormData,
 ): Promise<ImportarRetiradosState> {
-  const sb = await createClient();
-  const { data } = await sb.auth.getClaims();
-  const userId = data?.claims?.sub;
-  if (!userId) {
-    return { error: "Tu sesión expiró. Vuelve a iniciar sesión." };
-  }
-  const roles = await getUserRoles(userId);
-  if (!isAdmin(roles) && !hasRole(roles, ROLE_INGRESOS)) {
-    return { error: "No tienes permisos para importar el reporte." };
-  }
+  const acceso = await autorizar(PROCESOS.GESTION_ANTICIPOS, "usar");
+  if (!acceso.ok) return { error: acceso.error };
+  const { userId } = acceso;
 
   const file = formData.get("file");
   if (!(file instanceof File)) {

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { BUCKET } from "@/lib/conciliaciones/conciliar";
-import { createClient } from "@/lib/supabase/server";
+import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
+import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ACCEPTED_EXTENSIONS,
@@ -39,13 +40,6 @@ function buildStoragePath(userId: string, kind: UploadKind, extension: string): 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) {
-    return jsonError("Tu sesión expiró. Vuelve a iniciar sesión.", "unauthorized", 401);
-  }
-  const userId = data.claims.sub;
-
   let body: unknown;
   try {
     body = await request.json();
@@ -61,6 +55,11 @@ export async function POST(request: Request) {
   if (typeof pais !== "string" || pais.length === 0) {
     return jsonError("Falta el país", "bad_request", 400);
   }
+  const proceso = CONCILIACION_POR_PAIS[pais];
+  if (!proceso) return jsonError("País no válido", "bad_request", 400);
+  const acceso = await autorizar(proceso, "usar");
+  if (!acceso.ok) return respuestaDenegada(acceso);
+  const userId = acceso.userId;
   if (typeof kind !== "string" || !ALLOWED_KINDS.includes(kind as UploadKind)) {
     return jsonError(
       `Tipo de archivo inválido (debe ser ${ALLOWED_KINDS.join(" o ")})`,

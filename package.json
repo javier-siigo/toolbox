@@ -1,15 +1,16 @@
 {
-  "name": "siico-portal",
+  "name": "toolbox-portal",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src/",
+    "lint": "eslint src/ && node scripts/check-acceso.mjs",
     "typecheck": "tsc --noEmit",
     "import:retirados": "tsx scripts/import-retirados.ts",
-    "match:retirado": "tsx scripts/match-retirado.ts"
+    "match:retirado": "tsx scripts/match-retirado.ts",
+    "check:acceso": "node scripts/check-acceso.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

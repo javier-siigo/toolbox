@@ -74,10 +74,13 @@ import { CatalogoSheet } from "./catalogo-sheet";
 const SIN_PLANTILLA = "__ninguna__";
 
 interface CamposCardProps {
-  /** Catálogo; para admin incluye los deshabilitados. */
+  /** Catálogo; con nivel `gestionar` incluye los deshabilitados. */
   campos: CampoCatalogo[];
   plantillas: Plantilla[];
-  esAdmin: boolean;
+  /** Nivel `gestionar`: administra el catálogo de campos. */
+  puedeGestionar: boolean;
+  /** Nivel `usar`: crea, guarda y elimina plantillas. Con `ver` solo las aplica. */
+  puedeEditarPlantillas: boolean;
   seleccion: Set<string>;
   onSeleccionChange: (next: Set<string>) => void;
   /** Los filtros viajan con la plantilla. */
@@ -97,7 +100,8 @@ export function mismosIds(a: Set<string>, b: Set<string>): boolean {
 export function CamposCard({
   campos,
   plantillas,
-  esAdmin,
+  puedeGestionar,
+  puedeEditarPlantillas,
   seleccion,
   onSeleccionChange,
   filtros,
@@ -249,7 +253,7 @@ export function CamposCard({
               onChange={(e) => setBusqueda(e.target.value)}
             />
           </div>
-          {esAdmin && (
+          {puedeGestionar && (
             <Button
               variant="outline"
               onClick={() => setCatalogoOpen(true)}
@@ -283,37 +287,39 @@ export function CamposCard({
             </SelectContent>
           </Select>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9"
-              aria-label="Más acciones de plantilla"
-              disabled={disabled || isPending}
-            >
-              <MoreHorizontal className="size-4" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem
-              disabled={seleccion.size === 0}
-              onSelect={() => setGuardarComoOpen(true)}
-            >
-              <CopyPlus className="size-4" aria-hidden />
-              Guardar como nueva…
-            </DropdownMenuItem>
-            {plantilla && (
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onSelect={() => setEliminarOpen(true)}
+        {puedeEditarPlantillas && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-9"
+                aria-label="Más acciones de plantilla"
+                disabled={disabled || isPending}
               >
-                <Trash2 className="size-4" aria-hidden />
-                Eliminar “{plantilla.nombre}”
+                <MoreHorizontal className="size-4" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                disabled={seleccion.size === 0}
+                onSelect={() => setGuardarComoOpen(true)}
+              >
+                <CopyPlus className="size-4" aria-hidden />
+                Guardar como nueva…
               </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {plantilla && (
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={() => setEliminarOpen(true)}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                  Eliminar “{plantilla.nombre}”
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         {conCambios && (
           <>
             <span className="flex h-9 items-center gap-1.5 text-xs text-muted-foreground">
@@ -334,18 +340,20 @@ export function CamposCard({
             >
               <RotateCcw className="size-4" aria-hidden />
             </Button>
-            <Button
-              variant="outline"
-              onClick={guardarCambios}
-              disabled={disabled || isPending || seleccion.size === 0}
-            >
-              {isPending ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <Save className="size-4" aria-hidden />
-              )}
-              Guardar cambios
-            </Button>
+            {puedeEditarPlantillas && (
+              <Button
+                variant="outline"
+                onClick={guardarCambios}
+                disabled={disabled || isPending || seleccion.size === 0}
+              >
+                {isPending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Save className="size-4" aria-hidden />
+                )}
+                Guardar cambios
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -353,7 +361,7 @@ export function CamposCard({
       {habilitados.length === 0 ? (
         <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
           El catálogo no tiene campos habilitados.
-          {esAdmin ? " Usa Administrar catálogo para agregarlos." : " Pide a un administrador que los habilite."}
+          {puedeGestionar ? " Usa Administrar catálogo para agregarlos." : " Pide a quien gestiona el catálogo que los habilite."}
         </p>
       ) : (
         <div className="flex flex-col gap-4">
@@ -494,7 +502,7 @@ export function CamposCard({
         </AlertDialogContent>
       </AlertDialog>
 
-      {esAdmin && (
+      {puedeGestionar && (
         <CatalogoSheet open={catalogoOpen} onOpenChange={setCatalogoOpen} campos={campos} />
       )}
     </section>

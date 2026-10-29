@@ -16,7 +16,7 @@ Las páginas implementadas usan el mismo componente `ConciliacionesPageClient`. 
 
 ## Acceso
 
-Rol `conciliaciones` **con el país asignado**, o `admin`. La página llama a `requireProcesoAccess` y devuelve 404 si no hay acceso.
+Un proceso por país (`conciliaciones.colombia`, `conciliaciones.mexico`…). La página llama a `requireAcceso` y devuelve 404 sin acceso; las tres APIs (`upload-url`, `conciliar`, `convertir-txt`) resuelven el proceso con el `pais` del body y exigen nivel `usar`. Con `ver` se ven los bancos pero el botón de procesar queda deshabilitado.
 
 ## Flujo del usuario
 

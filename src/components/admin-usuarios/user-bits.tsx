@@ -8,36 +8,38 @@ import { FlagIcon } from "@/lib/flags";
 import { cn } from "@/lib/utils";
 
 import {
-  ROLE_META,
+  AREAS_CON_PERMISOS,
+  NIVEL_META,
   absoluteTime,
   displayName,
   initials,
-  isOrphan,
   relativeTime,
   type AdminUser,
   type Draft,
 } from "./helpers";
 
-export type Filter = "todos" | "atencion" | "admin" | "conciliaciones" | "ingresos";
+/** "todos", "atencion", "admin" o el slug de un área (usuarios con algún proceso en ella). */
+export type Filter = string;
 
 export const FILTERS: { id: Filter; label: string }[] = [
   { id: "todos", label: "Todos" },
   { id: "atencion", label: "Requieren atención" },
   { id: "admin", label: "Admin" },
-  { id: "conciliaciones", label: "Conciliaciones" },
-  { id: "ingresos", label: "Ingresos" },
+  ...AREAS_CON_PERMISOS.map((a) => ({ id: a.slug, label: a.label })),
 ];
 
+/** Procesos del área a los que el usuario tiene acceso (cualquier nivel). */
+export function procesosEnArea(d: Draft, areaSlug: string) {
+  const area = AREAS_CON_PERMISOS.find((a) => a.slug === areaSlug);
+  return (area?.procesos ?? []).filter((p) => d.esAdmin || d.procesos[p.id!]);
+}
+
 export function UserAvatar({ email, className }: { email: string; className?: string }) {
-  const orphan = isOrphan({ email });
   return (
     <span
       aria-hidden
       className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-full border font-mono text-[11px] font-semibold",
-        orphan
-          ? "border-dashed border-border bg-muted text-muted-foreground"
-          : "border-primary/15 bg-primary/10 text-primary",
+        "flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/10 font-mono text-[11px] font-semibold text-primary",
         className,
       )}
     >
@@ -47,7 +49,6 @@ export function UserAvatar({ email, className }: { email: string; className?: st
 }
 
 export function UserIdentity({ user, isSelf = false }: { user: AdminUser; isSelf?: boolean }) {
-  const orphan = isOrphan(user);
   return (
     <span className="flex min-w-0 items-center gap-3">
       <UserAvatar email={user.email} />
@@ -56,43 +57,51 @@ export function UserIdentity({ user, isSelf = false }: { user: AdminUser; isSelf
           {displayName(user.email)}
           {isSelf && <span className="text-xs font-normal text-muted-foreground">(tú)</span>}
         </span>
-        <span className={cn("truncate text-xs text-muted-foreground", orphan && "font-mono")}>
-          {orphan ? user.id.slice(0, 8) + "…" : user.email}
-        </span>
+        <span className="truncate text-xs text-muted-foreground">{user.email}</span>
       </span>
     </span>
   );
 }
 
-export function RoleChips({ draft }: { draft: Draft }) {
-  if (draft.roles.length === 0) {
-    return <span className="text-xs text-muted-foreground">Sin roles</span>;
+/** Admin, o un chip por área con cuántos procesos tiene; el título detalla procesos y niveles. */
+export function PermisoChips({ draft }: { draft: Draft }) {
+  if (draft.esAdmin) {
+    return (
+      <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+        Admin
+      </span>
+    );
   }
+  const areas = AREAS_CON_PERMISOS.map((a) => ({ area: a, procesos: procesosEnArea(draft, a.slug) })).filter(
+    (x) => x.procesos.length > 0,
+  );
+  if (areas.length === 0) return <span className="text-xs text-muted-foreground">Sin permisos</span>;
   return (
     <span className="flex flex-wrap items-center gap-1">
-      {draft.roles.map((r) => (
+      {areas.map(({ area, procesos }) => (
         <span
-          key={r}
-          className={cn(
-            "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
-            r === "admin"
-              ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-border bg-background text-foreground",
-          )}
+          key={area.slug}
+          title={procesos.map((p) => `${p.label}: ${NIVEL_META[draft.procesos[p.id!]!].label}`).join("\n")}
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] font-medium text-foreground"
         >
-          {ROLE_META[r]?.label ?? r}
+          {area.label}
+          <span className="font-mono tabular-nums text-muted-foreground">
+            {procesos.length}/{area.procesos.length}
+          </span>
         </span>
       ))}
     </span>
   );
 }
 
-export function FlagStrip({ paises }: { paises: string[] }) {
-  if (paises.length === 0) return null;
+/** Banderas de los países de conciliación a los que tiene acceso. */
+export function FlagStrip({ draft }: { draft: Draft }) {
+  const paises = procesosEnArea(draft, "conciliaciones").filter((p) => p.flagCode);
+  if (draft.esAdmin || paises.length === 0) return null;
   return (
     <span className="flex items-center gap-1">
       {paises.map((p) => (
-        <FlagIcon key={p} code={p} title={p} className="h-3 w-[18px] rounded-[2px] ring-1 ring-black/10" />
+        <FlagIcon key={p.slug} code={p.flagCode!} title={p.label} className="h-3 w-[18px] rounded-[2px] ring-1 ring-black/10" />
       ))}
     </span>
   );
@@ -177,10 +186,10 @@ export function FilterChips({
               className={cn(
                 "font-mono text-[11px] tabular-nums",
                 active ? "text-background/70" : "text-muted-foreground/80",
-                f.id === "atencion" && counts.atencion > 0 && !active && "text-amber-700 dark:text-amber-400",
+                f.id === "atencion" && (counts.atencion ?? 0) > 0 && !active && "text-amber-700 dark:text-amber-400",
               )}
             >
-              {counts[f.id]}
+              {counts[f.id] ?? 0}
             </span>
           </button>
         );
@@ -196,7 +205,8 @@ export function matches(user: AdminUser, d: Draft, q: string, f: Filter, issues:
   }
   if (f === "todos") return true;
   if (f === "atencion") return issues.length > 0;
-  return d.roles.includes(f);
+  if (f === "admin") return d.esAdmin;
+  return !d.esAdmin && procesosEnArea(d, f).length > 0;
 }
 
 /**

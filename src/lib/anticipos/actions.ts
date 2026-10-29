@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getUserRoles, hasIngresosOrAdmin } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { autorizar } from "@/lib/auth/acceso";
+import { PROCESOS } from "@/lib/auth/permisos-shared";
 import {
   MAX_ANTICIPOS_ROWS,
   anticipoCreateSchema,
@@ -44,34 +44,10 @@ function buildRetiroInfo(
   };
 }
 
-const SESION_EXPIRADA = "Tu sesión expiró. Vuelve a iniciar sesión.";
-const SIN_PERMISOS = "No tienes permisos para gestionar anticipos.";
-
-/**
- * Las server actions son un endpoint público: la autorización de la página
- * (`requireProcesoAccess`) no las cubre. Cada acción debe validar sesión y rol
- * aquí, y las políticas de RLS de `anticipos.registros` lo respaldan.
- */
-async function requireIngresos() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) {
-    return { supabase, userId: null, error: SESION_EXPIRADA } as const;
-  }
-  const roles = await getUserRoles(user.id);
-  if (!hasIngresosOrAdmin(roles)) {
-    return { supabase, userId: null, error: SIN_PERMISOS } as const;
-  }
-  return { supabase, userId: user.id, error: null } as const;
-}
-
 export async function getAnticiposAll(): Promise<AnticipoRow[]> {
-  const guard = await requireIngresos();
-  if (guard.error) return [];
-  const supabase = guard.supabase;
+  const acceso = await autorizar(PROCESOS.GESTION_ANTICIPOS, "ver");
+  if (!acceso.ok) return [];
+  const { supabase } = acceso;
 
   const { data, error } = await supabase
     .schema("anticipos").from("registros")
@@ -159,10 +135,9 @@ export async function createAnticipo(
     return { error: "Revisa los campos marcados", fieldErrors };
   }
 
-  const guard = await requireIngresos();
-  if (guard.error) return { error: guard.error };
-  const supabase = guard.supabase;
-  const userId = guard.userId!;
+  const acceso = await autorizar(PROCESOS.GESTION_ANTICIPOS, "usar");
+  if (!acceso.ok) return { error: acceso.error };
+  const { supabase, userId } = acceso;
 
   const payload: AnticipoCreateInput = parsed.data;
 
@@ -231,10 +206,9 @@ export async function updateAnticipo(
     return { error: "Revisa los campos marcados", fieldErrors };
   }
 
-  const guard = await requireIngresos();
-  if (guard.error) return { error: guard.error };
-  const supabase = guard.supabase;
-  const userId = guard.userId!;
+  const acceso = await autorizar(PROCESOS.GESTION_ANTICIPOS, "usar");
+  if (!acceso.ok) return { error: acceso.error };
+  const { supabase, userId } = acceso;
 
   const payload: AnticipoUpdateInput = parsed.data;
 
@@ -285,9 +259,9 @@ export async function deleteAnticipo(
     return { error: "Identificador inválido." };
   }
 
-  const guard = await requireIngresos();
-  if (guard.error) return { error: guard.error };
-  const supabase = guard.supabase;
+  const acceso = await autorizar(PROCESOS.GESTION_ANTICIPOS, "usar");
+  if (!acceso.ok) return { error: acceso.error };
+  const { supabase } = acceso;
 
   const { error } = await supabase
     .schema("anticipos").from("registros")
@@ -315,10 +289,9 @@ export async function legalizeAnticipo(
     return { error: "Identificador inválido." };
   }
 
-  const guard = await requireIngresos();
-  if (guard.error) return { error: guard.error };
-  const supabase = guard.supabase;
-  const userId = guard.userId!;
+  const acceso = await autorizar(PROCESOS.GESTION_ANTICIPOS, "usar");
+  if (!acceso.ok) return { error: acceso.error };
+  const { supabase, userId } = acceso;
 
   const { error } = await supabase
     .schema("anticipos").from("registros")

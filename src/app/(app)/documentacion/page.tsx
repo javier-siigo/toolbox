@@ -27,7 +27,7 @@ export default async function DocumentacionPage() {
           <EmptyState
             icon={<BookOpen className="size-6" aria-hidden />}
             title="No tienes documentos disponibles"
-            description="Pide a un administrador que te asigne el rol del proceso que necesitas consultar."
+            description="Pide a un administrador acceso al proceso que necesitas consultar."
           />
         ) : (
           <IndiceDocumentacion

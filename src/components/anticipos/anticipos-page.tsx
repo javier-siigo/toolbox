@@ -10,6 +10,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { SoloLectura } from "@/components/common/solo-lectura";
 import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
 import { AnticiposDataTable } from "@/components/anticipos/anticipos-data-table";
@@ -35,7 +36,14 @@ function isLegalizadoFalta(value: AnticipoRow["falta"]): boolean {
   return value === "legalizado";
 }
 
-export function AnticiposPageClient({ rows }: { rows: AnticipoRow[] }) {
+/** `soloLectura` (nivel `ver`): consulta la tabla sin crear, editar, legalizar ni importar. */
+export function AnticiposPageClient({
+  rows,
+  soloLectura = false,
+}: {
+  rows: AnticipoRow[];
+  soloLectura?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<AnticipoRow | null>(null);
@@ -197,18 +205,20 @@ export function AnticiposPageClient({ rows }: { rows: AnticipoRow[] }) {
             ) : null
           }
           action={
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              onClick={() => setImportOpen(true)}
-              data-tour="importar"
-              className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              {stats.excolaboradores > 0
-                ? "Actualizar reporte →"
-                : "Importar reporte →"}
-            </Button>
+            !soloLectura && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                onClick={() => setImportOpen(true)}
+                data-tour="importar"
+                className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                {stats.excolaboradores > 0
+                  ? "Actualizar reporte →"
+                  : "Importar reporte →"}
+              </Button>
+            )
           }
         />
       </div>
@@ -222,17 +232,21 @@ export function AnticiposPageClient({ rows }: { rows: AnticipoRow[] }) {
           </p>
           <div className="flex shrink-0 gap-2">
             <ComoUsar steps={TOUR_ANTICIPOS} className="h-9" />
-            <Button type="button" onClick={() => setOpen(true)} data-tour="nuevo">
-              <Plus className="size-4" />
-              Nuevo registro
-            </Button>
+            {!soloLectura && (
+              <Button type="button" onClick={() => setOpen(true)} data-tour="nuevo">
+                <Plus className="size-4" />
+                Nuevo registro
+              </Button>
+            )}
           </div>
         </div>
 
+        {soloLectura && <SoloLectura />}
+
         <AnticiposDataTable
           rows={rows}
-          onEdit={setEditingRow}
-          onDelete={setDeletingRow}
+          onEdit={soloLectura ? undefined : setEditingRow}
+          onDelete={soloLectura ? undefined : setDeletingRow}
           highlightedRowIds={highlightedRowIds}
         />
       </div>

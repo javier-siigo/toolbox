@@ -3,48 +3,35 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, ChevronRight, Copy, RotateCcw, Save, Trash2, UserX } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Copy, RotateCcw, Save, UserX } from "lucide-react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { deleteOrphanRoles, updateUserRoles } from "@/lib/admin/users";
-import { ALL_ROLES, KNOWN_PAISES, type PaisCode, type RoleName } from "@/lib/auth/roles-shared";
+import { updatePermisos } from "@/lib/admin/users";
 import { FlagIcon } from "@/lib/flags";
 import { cn } from "@/lib/utils";
 
 import {
+  AREAS_CON_PERMISOS,
   EMPTY_DRAFT,
-  PAIS_LABEL,
-  ROLE_META,
   diffLabels,
   displayName,
   isDirty,
   isInactive,
   lastActivity,
-  isOrphan,
   issuesFor,
   type AdminUser,
   type Draft,
 } from "./helpers";
-import { RoleEditor } from "./role-editor";
+import { PermisosEditor } from "./permisos-editor";
 import {
+  FILTERS,
   FilterChips,
   FlagStrip,
   IssueBadge,
-  RoleChips,
+  PermisoChips,
   SearchBox,
   TimeAgo,
   UserAvatar,
@@ -54,7 +41,7 @@ import {
 } from "./user-bits";
 
 const toDrafts = (users: AdminUser[]) =>
-  Object.fromEntries(users.map((u) => [u.id, { roles: u.roles, paises: u.paises }])) as Record<string, Draft>;
+  Object.fromEntries(users.map((u) => [u.id, { esAdmin: u.esAdmin, procesos: u.procesos }])) as Record<string, Draft>;
 
 export function UsuariosPage({ users, currentUserId }: { users: AdminUser[]; currentUserId: string }) {
   const router = useRouter();
@@ -82,27 +69,19 @@ export function UsuariosPage({ users, currentUserId }: { users: AdminUser[]; cur
 
   const savedOf = (id: string) => saved[id] ?? EMPTY_DRAFT;
   const draftOf = (id: string) => drafts[id] ?? EMPTY_DRAFT;
-  const issuesOf = (u: AdminUser) => issuesFor(u, savedOf(u.id));
+  const issuesOf = (u: AdminUser) => issuesFor(savedOf(u.id));
 
   const pending = users.filter((u) => issuesOf(u).length > 0);
   const visible = users.filter((u) => matches(u, savedOf(u.id), query, filter, issuesOf(u)));
-  const counts: Record<Filter, number> = {
-    todos: users.length,
-    atencion: pending.length,
-    admin: users.filter((u) => savedOf(u.id).roles.includes("admin")).length,
-    conciliaciones: users.filter((u) => savedOf(u.id).roles.includes("conciliaciones")).length,
-    ingresos: users.filter((u) => savedOf(u.id).roles.includes("ingresos")).length,
-  };
+  const counts: Record<Filter, number> = Object.fromEntries(
+    FILTERS.map((f) => [f.id, users.filter((u) => matches(u, savedOf(u.id), "", f.id, issuesOf(u))).length]),
+  );
 
   const save = async (id: string) => {
     const d = draftOf(id);
     setSavingId(id);
     try {
-      const result = await updateUserRoles({
-        userId: id,
-        roles: d.roles as RoleName[],
-        paises: d.paises as PaisCode[],
-      });
+      const result = await updatePermisos({ userId: id, esAdmin: d.esAdmin, procesos: d.procesos });
       if (!result.ok) {
         toast.error(result.error);
         return false;
@@ -112,22 +91,6 @@ export function UsuariosPage({ users, currentUserId }: { users: AdminUser[]; cur
       toast.success(`Permisos de ${u ? displayName(u.email) : "usuario"} actualizados`);
       router.refresh();
       return true;
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  const removeOrphan = async (id: string) => {
-    setSavingId(id);
-    try {
-      const result = await deleteOrphanRoles(id);
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Registro huérfano eliminado");
-      setOpenId(null);
-      router.refresh();
     } finally {
       setSavingId(null);
     }
@@ -143,7 +106,7 @@ export function UsuariosPage({ users, currentUserId }: { users: AdminUser[]; cur
         </span>
         <p className="text-sm font-semibold text-foreground">Todavía no hay usuarios</p>
         <p className="max-w-sm text-sm text-muted-foreground">
-          Las personas aparecen aquí después de crear su cuenta en el portal. Luego podrás asignarles roles.
+          Las personas aparecen aquí después de crear su cuenta en el portal. Luego podrás darles acceso a procesos.
         </p>
       </div>
     );
@@ -259,7 +222,6 @@ export function UsuariosPage({ users, currentUserId }: { users: AdminUser[]; cur
             onSave={async () => {
               if (await save(open.id)) setOpenId(null);
             }}
-            onRemoveOrphan={() => removeOrphan(open.id)}
           />
         )}
       </EditorSurface>
@@ -280,8 +242,8 @@ function AccessSummary({
 }) {
   return (
     <span className={cn("flex flex-wrap items-center gap-2", className)}>
-      {draft.roles.length > 0 && <RoleChips draft={draft} />}
-      <FlagStrip paises={draft.paises} />
+      <PermisoChips draft={draft} />
+      <FlagStrip draft={draft} />
       <IssueBadge issues={issues} />
       {dirty && <span className="text-[11px] font-medium text-primary">Cambios sin guardar</span>}
     </span>
@@ -369,6 +331,7 @@ function CoveragePanel({
   onPick: (id: string) => void;
 }) {
   const MAX = 4;
+  const resumen = FILTERS.filter((f) => f.id !== "todos" && f.id !== "atencion");
   return (
     <section aria-labelledby="cobertura" className="flex flex-col rounded-lg border border-border bg-card shadow-sm">
       <header className="border-b border-border px-5 py-3">
@@ -378,22 +341,28 @@ function CoveragePanel({
       </header>
       <div className="flex flex-1 flex-col gap-4 px-5 py-4">
         <dl className="grid grid-cols-3 gap-3">
-          {ALL_ROLES.map((r) => (
-            <div key={r} className="flex flex-col gap-1">
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {ROLE_META[r]?.label ?? r}
-              </dt>
-              <dd className="font-mono text-lg font-semibold leading-none tabular-nums text-foreground">{counts[r]}</dd>
+          {resumen.map((f) => (
+            <div key={f.id} className="flex flex-col gap-1">
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{f.label}</dt>
+              <dd className="font-mono text-lg font-semibold leading-none tabular-nums text-foreground">
+                {counts[f.id] ?? 0}
+              </dd>
             </div>
           ))}
         </dl>
-        <ul className="flex flex-col gap-1.5" aria-label="Personas por país de conciliación">
-          {KNOWN_PAISES.map((code) => {
-            const people = users.filter((u) => savedOf(u.id).paises.includes(code));
+        <ul className="flex flex-col gap-1.5" aria-label="Personas con acceso por proceso (sin contar admins)">
+          {AREAS_CON_PERMISOS.flatMap((a) => a.procesos).map((proc) => {
+            const people = users.filter((u) => !savedOf(u.id).esAdmin && savedOf(u.id).procesos[proc.id!]);
             return (
-              <li key={code} className="flex min-h-7 items-center gap-2 text-xs">
-                <FlagIcon code={code} className="h-3 w-[18px] shrink-0 rounded-[2px] ring-1 ring-black/10" />
-                <span className="w-16 shrink-0 text-muted-foreground">{PAIS_LABEL[code]}</span>
+              <li key={proc.id} className="flex min-h-7 items-center gap-2 text-xs">
+                {proc.flagCode ? (
+                  <FlagIcon code={proc.flagCode} className="h-3 w-[18px] shrink-0 rounded-[2px] ring-1 ring-black/10" />
+                ) : (
+                  <proc.icon className="size-3.5 w-[18px] shrink-0 text-muted-foreground" aria-hidden />
+                )}
+                <span className="w-32 shrink-0 truncate text-muted-foreground" title={proc.label}>
+                  {proc.label}
+                </span>
                 {people.length === 0 ? (
                   <span className="font-medium text-amber-700 dark:text-amber-400">Sin cobertura</span>
                 ) : (
@@ -457,7 +426,7 @@ function EditorSurface({
         <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
           <SheetHeader className="sr-only">
             <SheetTitle>{title}</SheetTitle>
-            <SheetDescription>Roles y países a los que tiene acceso.</SheetDescription>
+            <SheetDescription>Procesos a los que tiene acceso y con qué nivel.</SheetDescription>
           </SheetHeader>
           {children}
         </SheetContent>
@@ -470,7 +439,7 @@ function EditorSurface({
       <DrawerContent className="overflow-hidden">
         <DrawerHeader className="sr-only">
           <DrawerTitle>{title}</DrawerTitle>
-          <DrawerDescription>Roles y países a los que tiene acceso.</DrawerDescription>
+          <DrawerDescription>Procesos a los que tiene acceso y con qué nivel.</DrawerDescription>
         </DrawerHeader>
         {children}
       </DrawerContent>
@@ -487,7 +456,6 @@ function EditorBody({
   onChange,
   onDiscard,
   onSave,
-  onRemoveOrphan,
 }: {
   user: AdminUser;
   isSelf: boolean;
@@ -497,10 +465,8 @@ function EditorBody({
   onChange: (d: Draft) => void;
   onDiscard: () => void;
   onSave: () => void;
-  onRemoveOrphan: () => void;
 }) {
   const diff = diffLabels(saved, draft);
-  const orphan = isOrphan(user);
   const [copied, setCopied] = React.useState(false);
 
   const copyId = async () => {
@@ -529,88 +495,47 @@ function EditorBody({
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
-        {orphan ? (
-          <div className="flex flex-col gap-4">
-            <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-              <UserX className="mt-0.5 size-4 shrink-0" aria-hidden />
-              Este registro de roles no tiene cuenta en Auth: la persona fue eliminada o nunca terminó su registro.
-              No puede iniciar sesión, así que lo único útil es borrarlo.
-            </p>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              Roles guardados: <RoleChips draft={saved} />
-            </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={saving}
-                  className="w-fit text-destructive hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 />
-                  {saving ? "Eliminando…" : "Eliminar registro"}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>¿Eliminar el registro huérfano?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Se borran los roles guardados para <span className="font-mono">{user.id}</span>. No afecta a ninguna
-                    cuenta activa.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction variant="destructive" onClick={onRemoveOrphan}>
-                    Eliminar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        ) : (
-          <RoleEditor draft={draft} onChange={onChange} isSelf={isSelf} disabled={saving} />
-        )}
+        <PermisosEditor draft={draft} onChange={onChange} isSelf={isSelf} disabled={saving} />
       </div>
 
-      {!orphan && (
-        <div
-          className={cn(
-            "flex flex-col gap-3 border-t border-border px-5 py-3 transition-colors",
-            diff.length > 0 && "bg-primary/5",
-          )}
-        >
-          <div className="flex min-h-5 flex-wrap items-center gap-1.5 text-xs" aria-live="polite">
-            {diff.length === 0 ? (
-              <span className="text-muted-foreground">Sin cambios</span>
-            ) : (
-              diff.map((c) => (
-                <span
-                  key={c.sign + c.label}
-                  className={cn(
-                    "rounded-sm px-1.5 py-0.5 font-medium",
-                    c.sign === "+"
-                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+      <div
+        className={cn(
+          "flex flex-col gap-3 border-t border-border px-5 py-3 transition-colors",
+          diff.length > 0 && "bg-primary/5",
+        )}
+      >
+        <div className="flex min-h-5 flex-wrap items-center gap-1.5 text-xs" aria-live="polite">
+          {diff.length === 0 ? (
+            <span className="text-muted-foreground">Sin cambios</span>
+          ) : (
+            diff.map((c) => (
+              <span
+                key={c.sign + c.label}
+                className={cn(
+                  "rounded-sm px-1.5 py-0.5 font-medium",
+                  c.sign === "+"
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    : c.sign === "~"
+                      ? "bg-primary/10 text-primary"
                       : "bg-muted text-muted-foreground line-through",
-                  )}
-                >
-                  {c.sign} {c.label}
-                </span>
-              ))
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="ghost" disabled={diff.length === 0 || saving} onClick={onDiscard}>
-              <RotateCcw />
-              Descartar
-            </Button>
-            <Button size="sm" disabled={diff.length === 0 || saving} onClick={onSave}>
-              <Save />
-              {saving ? "Guardando…" : "Guardar cambios"}
-            </Button>
-          </div>
+                )}
+              >
+                {c.sign === "~" ? c.label : `${c.sign} ${c.label}`}
+              </span>
+            ))
+          )}
         </div>
-      )}
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" disabled={diff.length === 0 || saving} onClick={onDiscard}>
+            <RotateCcw />
+            Descartar
+          </Button>
+          <Button size="sm" disabled={diff.length === 0 || saving} onClick={onSave}>
+            <Save />
+            {saving ? "Guardando…" : "Guardar cambios"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

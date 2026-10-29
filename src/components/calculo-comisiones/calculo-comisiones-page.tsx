@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
+import { SoloLectura } from "@/components/common/solo-lectura";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   actualizarConcepto,
@@ -55,6 +56,8 @@ interface CalculoComisionesPageClientProps {
   periodoMax: string;
   /** Error al cargar desde Supabase; la lectura del informe sigue funcionando. */
   errorDatos?: string | null;
+  /** Nivel `ver`: consulta, carga el informe y exporta, pero no guarda nada. */
+  soloLectura?: boolean;
 }
 
 function valoresDe(valores: ValorPeriodo[], periodo: string): Map<string, number> {
@@ -89,6 +92,7 @@ export function CalculoComisionesPageClient({
   periodoInicial,
   periodoMax,
   errorDatos = null,
+  soloLectura = false,
 }: CalculoComisionesPageClientProps) {
   const [conceptos, setConceptos] = useState<Concepto[]>(data.conceptos);
   const [valores, setValores] = useState<ValorPeriodo[]>(data.valores);
@@ -480,7 +484,7 @@ export function CalculoComisionesPageClient({
             {exportando ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
             Exportar Excel
           </Button>
-          <Button size="sm" onClick={() => void onGuardar()} disabled={guardando || !sinGuardar}>
+          <Button size="sm" onClick={() => void onGuardar()} disabled={soloLectura || guardando || !sinGuardar}>
             {guardando ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
             Guardar cierre
           </Button>
@@ -523,6 +527,8 @@ export function CalculoComisionesPageClient({
           </div>
         </div>
       )}
+
+      {soloLectura && <SoloLectura />}
 
       {errorDatos && (
         <div
@@ -588,6 +594,7 @@ export function CalculoComisionesPageClient({
             abierto={estaAbierto(0)}
             onToggle={() => toggle(0)}
           >
+            <fieldset disabled={soloLectura} className="contents">
             <ConceptosPanel
               periodo={periodo}
               conceptos={conceptos}
@@ -601,6 +608,7 @@ export function CalculoComisionesPageClient({
               onActivo={(id, activo) => void patchConcepto(id, { activo })}
               onCopiarAnterior={() => void onCopiarAnterior()}
             />
+            </fieldset>
           </Paso>
 
           <Paso
@@ -615,7 +623,9 @@ export function CalculoComisionesPageClient({
             abierto={estaAbierto(1)}
             onToggle={() => toggle(1)}
           >
-            <BasePanel base={baseMes} onChange={(p, c, v) => void onBase(p, c, v)} />
+            <fieldset disabled={soloLectura} className="contents">
+              <BasePanel base={baseMes} onChange={(p, c, v) => void onBase(p, c, v)} />
+            </fieldset>
           </Paso>
 
           <Paso
@@ -665,7 +675,7 @@ export function CalculoComisionesPageClient({
                 fuente={archivo ? "informe" : "registrado"}
                 guardadoEn={guardado?.createdAt ?? null}
                 sinGuardar={sinGuardar}
-                puedeGuardar={!!archivo}
+                puedeGuardar={!soloLectura && !!archivo}
                 comprobantes={
                   archivo ? <DocumentosTable documentos={archivo.documentos} periodo={periodo} /> : undefined
                 }
@@ -686,7 +696,7 @@ export function CalculoComisionesPageClient({
               setPeriodo(p);
               setTab("cierre");
             }}
-            onEliminar={onEliminar}
+            onEliminar={soloLectura ? undefined : onEliminar}
           />
         </TabsContent>
       </Tabs>

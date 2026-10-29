@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { getUserRoles, hasIngresosOrAdmin, isAdmin } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { autorizar } from "@/lib/auth/acceso";
+import { PROCESOS, puede } from "@/lib/auth/permisos-shared";
 import type { Database, Json } from "@/types/supabase";
 
 import {
@@ -70,7 +70,6 @@ const nuevoCampoSchema = z
     message: "Los campos de Tercero son fijos: documento o nombre",
   });
 
-const SESION_EXPIRADA = "Tu sesión expiró. Vuelve a iniciar sesión.";
 
 function dbError(message: string, code?: string): string {
   if (code === "23505") return "Ya existe un registro con ese nombre o campo.";
@@ -83,28 +82,6 @@ function primerError(error: z.ZodError, fallback: string): string {
   return error.issues[0]?.message ?? fallback;
 }
 
-async function sesion() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub;
-  if (!userId) return { supabase, userId: null, roles: null };
-  return { supabase, userId, roles: await getUserRoles(userId) };
-}
-
-async function requireAdminAction() {
-  const s = await sesion();
-  if (!s.userId || !s.roles) return { ...s, error: SESION_EXPIRADA };
-  if (!isAdmin(s.roles)) return { ...s, error: "Solo un administrador puede editar el catálogo de campos." };
-  return { ...s, error: null };
-}
-
-async function requireIngresosAction() {
-  const s = await sesion();
-  if (!s.userId || !s.roles) return { ...s, error: SESION_EXPIRADA };
-  if (!hasIngresosOrAdmin(s.roles)) return { ...s, error: "No tienes permisos para esta exportación." };
-  return { ...s, error: null };
-}
-
 // ---------------------------------------------------------------------------
 // Lectura
 
@@ -113,11 +90,14 @@ export interface CamposData {
   plantillas: Plantilla[];
 }
 
-/** Catálogo (completo para admin; solo habilitados para el resto) y plantillas. */
-export async function getCamposData(admin: boolean): Promise<CamposData> {
-  const supabase = await createClient();
+/** Catálogo (completo con nivel `gestionar`; solo habilitados para el resto) y plantillas. */
+export async function getCamposData(): Promise<CamposData> {
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "ver");
+  if (!acceso.ok) throw new Error(acceso.error);
+  const { supabase } = acceso;
+  const gestiona = puede(acceso.permisos, PROCESOS.EXPORT_BANCOS, "gestionar");
   let camposQuery = supabase.schema("export_bancos").from("campos").select(CAMPO_COLS).order("orden").order("created_at");
-  if (!admin) camposQuery = camposQuery.eq("habilitado", true);
+  if (!gestiona) camposQuery = camposQuery.eq("habilitado", true);
   const [camposRes, plantillasRes] = await Promise.all([
     camposQuery,
     supabase.schema("export_bancos").from("plantillas").select("id, nombre, campos, filtros, updated_at").order("nombre"),
@@ -140,8 +120,9 @@ export async function getCamposData(admin: boolean): Promise<CamposData> {
 // Catálogo (admin)
 
 export async function descubrirCamposAction(): Promise<ActionResult<CampoDescubierto[]>> {
-  const { supabase, error } = await requireAdminAction();
-  if (error) return { ok: false, error };
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "gestionar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const { data, error: dbErr } = await supabase.schema("export_bancos").from("campos").select("tabla, campo, modo");
   if (dbErr) return { ok: false, error: dbError(dbErr.message, dbErr.code) };
@@ -163,8 +144,9 @@ export async function agregarCampos(
 ): Promise<ActionResult<CampoCatalogo[]>> {
   const parsed = z.array(nuevoCampoSchema).min(1, "Selecciona al menos un campo").max(200).safeParse(nuevos);
   if (!parsed.success) return { ok: false, error: primerError(parsed.error, "Campos inválidos") };
-  const { supabase, error } = await requireAdminAction();
-  if (error) return { ok: false, error };
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "gestionar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const { data: last } = await supabase
     .schema("export_bancos").from("campos")
@@ -202,8 +184,9 @@ export async function actualizarCampo(
   }
   if (patch.habilitado !== undefined) update.habilitado = patch.habilitado;
 
-  const { supabase, error } = await requireAdminAction();
-  if (error) return { ok: false, error };
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "gestionar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
   const { error: dbErr } = await supabase.schema("export_bancos").from("campos").update(update).eq("id", id);
   if (dbErr) {
     if (dbErr.code === "23514") {
@@ -220,8 +203,9 @@ export async function actualizarCampo(
 export async function ordenarCampos(ids: string[]): Promise<ActionResult> {
   const parsed = idsSchema.safeParse(ids);
   if (!parsed.success) return { ok: false, error: primerError(parsed.error, "Orden inválido") };
-  const { supabase, error } = await requireAdminAction();
-  if (error) return { ok: false, error };
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "gestionar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const now = new Date().toISOString();
   const results = await Promise.all(
@@ -250,8 +234,9 @@ export async function crearPlantilla(
   if (!c.success) return { ok: false, error: primerError(c.error, "Campos inválidos") };
   const f = filtrosSchema.safeParse(filtros);
   if (!f.success) return { ok: false, error: primerError(f.error, "Filtros inválidos") };
-  const { supabase, error } = await requireIngresosAction();
-  if (error) return { ok: false, error };
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
 
   const { data, error: dbErr } = await supabase
     .schema("export_bancos").from("plantillas")
@@ -277,8 +262,9 @@ export async function actualizarPlantilla(
   id: string,
   patch: { nombre?: string; campos?: string[]; filtros?: Filtro[] },
 ): Promise<ActionResult> {
-  const { supabase, userId, error } = await requireIngresosAction();
-  if (error) return { ok: false, error };
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase, userId } = acceso;
   const update: {
     nombre?: string;
     campos?: string[];
@@ -287,7 +273,7 @@ export async function actualizarPlantilla(
     updated_by: string;
   } = {
     updated_at: new Date().toISOString(),
-    updated_by: userId!,
+    updated_by: userId,
   };
   if (patch.nombre !== undefined) {
     const n = nombrePlantillaSchema.safeParse(patch.nombre);
@@ -313,8 +299,9 @@ export async function actualizarPlantilla(
 }
 
 export async function eliminarPlantilla(id: string): Promise<ActionResult> {
-  const { supabase, error } = await requireIngresosAction();
-  if (error) return { ok: false, error };
+  const acceso = await autorizar(PROCESOS.EXPORT_BANCOS, "usar");
+  if (!acceso.ok) return { ok: false, error: acceso.error };
+  const { supabase } = acceso;
   const { error: dbErr } = await supabase.schema("export_bancos").from("plantillas").delete().eq("id", id);
   if (dbErr) return { ok: false, error: dbError(dbErr.message, dbErr.code) };
 

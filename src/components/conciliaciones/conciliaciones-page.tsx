@@ -10,6 +10,7 @@ import { tourConciliaciones } from "./tour";
 import { TxtConvertRow, type TxtConversion } from "./txt-convert-row";
 import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
+import { SoloLectura } from "@/components/common/solo-lectura";
 import {
   MAX_TXT_FILES,
   MAX_TXT_TOTAL_BYTES,
@@ -93,6 +94,8 @@ interface UploadArgs {
 interface ConciliacionesPageClientProps {
   pais: Pais;
   bancos: BancoConciliacion[];
+  /** Nivel `ver`: puede revisar bancos pero no ejecutar conciliaciones. */
+  soloLectura?: boolean;
 }
 
 const PAIS_LABEL: Record<Pais, string> = {
@@ -106,6 +109,7 @@ const PAIS_LABEL: Record<Pais, string> = {
 export function ConciliacionesPageClient({
   pais,
   bancos,
+  soloLectura = false,
 }: ConciliacionesPageClientProps) {
   const [banco, setBanco] = React.useState<BancoConciliacion | null>(null);
   const [principalFile, setPrincipalFile] = React.useState<File | null>(null);
@@ -495,7 +499,7 @@ export function ConciliacionesPageClient({
   const isBusy =
     currentRun?.status === "uploading" || currentRun?.status === "processing";
   const isConvertingTxt = txtConversion.status === "processing";
-  const canSubmit = !!banco && !!principalFile && !isBusy && !isConvertingTxt;
+  const canSubmit = !soloLectura && !!banco && !!principalFile && !isBusy && !isConvertingTxt;
   const conTxt = !!banco && requiereConversionTxt(pais, banco.slug);
 
   const idleFileStatus: ConciliacionRunStatus = "idle";
@@ -610,6 +614,11 @@ export function ConciliacionesPageClient({
               </span>
             </p>
           )}
+        {soloLectura && (
+          <SoloLectura className="mr-auto">
+            Tienes acceso de solo lectura: no puedes ejecutar conciliaciones.
+          </SoloLectura>
+        )}
         {conTxt && currentRun?.status === "error" && (
           <p className="mr-auto text-sm text-destructive" role="alert">
             Falló el paso 2 (conciliación): {currentRun.error}

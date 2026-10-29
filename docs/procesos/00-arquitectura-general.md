@@ -1,4 +1,4 @@
-# Arquitectura general del portal SIICO
+# Arquitectura general del portal Toolbox
 
 > Portal interno del equipo contable de Siigo para operar automatizaciones (n8n) y vistas de datos contables (Supabase). Esta guía describe lo que es común a todos los procesos. Cada proceso tiene su propio documento.
 
@@ -60,7 +60,7 @@ supabase/migrations/                  Migraciones SQL (ver "Base de datos: un sc
 | Cálculo de comisiones | `/ingresos/calculo-comisiones` | `ingresos` | No | `comisiones.*` (6 tablas + RPC) | [04](04-calculo-comisiones.md) |
 | Gestión y legalización de anticipos | `/ingresos/gestion-anticipos` | `ingresos` | No | `anticipos.registros`, `anticipos.retirados` | [05](05-gestion-anticipos.md) |
 | Importación de excolaboradores | Sheet dentro de anticipos + CLI | `ingresos` o `admin` | No | `anticipos.retirados`, `anticipos.retirados_imports` | [06](06-importacion-retirados.md) |
-| Autenticación, roles y usuarios | `/login`, `/admin/usuarios` | `admin` (usuarios) | No | `core.user_roles`, `auth.users` | [01](01-autenticacion-y-roles.md) |
+| Autenticación, permisos y usuarios | `/login`, `/admin/usuarios` | admin (usuarios) | No | `core.procesos`, `core.permisos`, `core.usuarios`, `auth.users` | [01](01-autenticacion-y-roles.md) |
 
 ## 4. Variables de entorno
 
@@ -83,19 +83,19 @@ Plantilla en `.env.example`; se copia a `.env.local`. Validadas en `src/lib/env.
 
 | Schema | Contenido |
 |---|---|
-| `core` | `user_roles`, `user_activity`, RPC `touch_last_seen`, `storage_archivos_vencidos` (solo service role) |
+| `core` | `procesos`, `permisos`, `usuarios`, `user_activity`, RPC `touch_last_seen`; `guardar_permisos` y `storage_archivos_vencidos` (solo service role) |
 | `conciliaciones` | `bancos` |
 | `anticipos` | `registros`, `retirados`, `retirados_imports`, enums `falta` / `observacion_1`, RPC `match_colaborador_retirado(_batch)` |
 | `comisiones` | `conceptos`, `periodo_valores`, `bases`, `reconocimientos`, `gasto_registrado`, `cierres`, RPC `guardar_cierre` |
 | `export_bancos` | `campos`, `campo_valores`, `plantillas` |
-| `private` | Helpers de RLS/triggers (`current_user_has_role`, `set_updated_at`, `normalize_colaborador_name*`). **No se expone** en la Data API |
+| `private` | Helpers de RLS/triggers (`tiene_acceso`, `set_updated_at`, `normalize_colaborador_name*`). **No se expone** en la Data API |
 
 Desde código: `supabase.schema("comisiones").from("conceptos")`.
 
 **Agregar un proceso nuevo**:
 
 1. Migración con `create schema <proceso>;` y las tablas dentro. Copiar el bloque de privilegios de `20261029120000_schemas_por_proceso.sql` (usage + default privileges para `authenticated`/`service_role`, nunca `anon`).
-2. Habilitar RLS en cada tabla y usar `private.current_user_has_role('<rol>')` en las políticas.
+2. Registrar el proceso en `core.procesos` y en `PROCESOS` (`src/lib/auth/permisos-shared.ts`); habilitar RLS con `private.tiene_acceso('<area>.<proceso>', 'ver' | 'usar')`. Ver [01](01-autenticacion-y-roles.md#agregar-un-proceso).
 3. Agregar el schema en Supabase › Project Settings › Data API › **Exposed schemas**.
 4. Regenerar `src/types/supabase.ts` incluyendo el schema nuevo.
 
@@ -107,7 +107,7 @@ Desde código: `supabase.schema("comisiones").from("conceptos")`.
 |---|---|---|---|
 | `lib/supabase/server.ts` | anon key + cookies de sesión | Server Components, Server Actions, Route Handlers | Aplica con el usuario logueado |
 | `lib/supabase/client.ts` | anon key | Navegador | Aplica |
-| `lib/supabase/admin.ts` | **service role** (singleton cacheado) | Solo servidor: signed URLs, Storage, `core.user_roles`, import de retirados | Se salta RLS |
+| `lib/supabase/admin.ts` | **service role** (singleton cacheado) | Solo servidor: signed URLs, Storage, lectura de permisos, import de retirados | Se salta RLS |
 
 ## 6. Patrón común: subir archivo y ejecutar un flujo n8n
 
@@ -159,13 +159,12 @@ Reglas compartidas (`src/lib/uploads.ts`):
 | Elemento | Dónde vive | Impacto en la documentación |
 |---|---|---|
 | Workflows de n8n (lógica real de conciliación por banco y de notas crédito) | Servidor n8n | Aquí solo se documenta el **contrato** (entrada/salida). Para documentar los pasos internos hay que exportar los JSON de los workflows. |
-| Migraciones originales de `anticipos.registros`, `conciliaciones.bancos`, `core.user_roles`, función `private.current_user_has_role` y buckets/policies de Storage | Supabase (creadas fuera del repo; desde `20261029120000` todo se versiona aquí) | Esquema inferido de `types/supabase.ts`. Conviene versionarlas. |
+| Migraciones originales de `anticipos.registros`, `conciliaciones.bancos` y buckets/policies de Storage | Supabase (creadas fuera del repo; desde `20261029120000` todo se versiona aquí) | Esquema inferido de `types/supabase.ts`. Conviene versionarlas. |
 | Reglas RLS de anticipos y conciliaciones | Supabase | No verificables desde el código. |
 
 ## 10. Hallazgos transversales
 
 1. **README desactualizado**: describe rutas `automations`, `executions`, `settings` y "Fase 1 — scaffold" que ya no existen.
-2. **Autorización inconsistente**: solo las páginas de conciliaciones y `admin/usuarios` validan rol en el servidor. Las de `ingresos/*` no llaman a `requireProcesoAccess`; dependen de que el sidebar oculte el acceso y, en comisiones, de RLS.
-3. **API de conciliaciones y notas crédito** validan solo sesión, no rol ni país.
+2. ~~Autorización inconsistente~~ y 3. ~~APIs que solo validaban sesión~~: **resueltos** con la capa de acceso (`src/lib/auth/acceso.ts`) y `npm run lint` (`check:acceso`). Ver [01](01-autenticacion-y-roles.md#capa-de-acceso-el-unico-guard).
 4. **Migraciones incompletas** en `supabase/migrations/` (ver sección 9).
 5. **Cobertura de pruebas**: solo un spec de ejemplo de Playwright.

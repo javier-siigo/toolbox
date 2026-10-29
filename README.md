@@ -1,4 +1,4 @@
-# SIICO · Portal de automatizaciones contables
+# Toolbox · Portal de automatizaciones contables
 
 Portal interno para que el equipo contable de Siigo opere y supervise las
 automatizaciones expuestas vía **n8n**, con autenticación gestionada por

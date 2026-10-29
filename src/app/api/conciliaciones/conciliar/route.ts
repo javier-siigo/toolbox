@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { ConciliacionError, cleanupStorage, conciliarColombia } from "@/lib/conciliaciones/conciliar";
 import { getBancoPorSlug } from "@/lib/conciliaciones/bancos";
-import { createClient } from "@/lib/supabase/server";
+import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
+import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
 import { PREVIO_INVALID_TYPE_MESSAGE, isXlsxFilename } from "@/lib/uploads";
 
 function jsonError(message: string, code: string, status: number) {
@@ -17,13 +18,6 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) {
-    return jsonError("Tu sesión expiró. Vuelve a iniciar sesión.", "unauthorized", 401);
-  }
-  const userId = data.claims.sub;
-
   let body: unknown;
   try {
     body = await request.json();
@@ -40,6 +34,11 @@ export async function POST(request: Request) {
   if (typeof pais !== "string" || pais.length === 0) {
     return jsonError("Falta el país", "bad_request", 400);
   }
+  const proceso = CONCILIACION_POR_PAIS[pais];
+  if (!proceso) return jsonError("País no válido", "bad_request", 400);
+  const acceso = await autorizar(proceso, "usar");
+  if (!acceso.ok) return respuestaDenegada(acceso);
+  const userId = acceso.userId;
   if (typeof banco !== "string" || banco.length === 0) {
     return jsonError("Falta el banco", "bad_request", 400);
   }

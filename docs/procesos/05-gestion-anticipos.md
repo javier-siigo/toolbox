@@ -6,7 +6,7 @@ Registro y seguimiento de **anticipos pendientes de legalizar**, por colaborador
 
 ## Acceso
 
-Ruta `/ingresos/gestion-anticipos`, área Ingresos (rol `ingresos` o `admin`). La página no valida rol en servidor; el sidebar solo la muestra a esos roles. Las reglas RLS de `anticipos.registros` no están en el repo.
+Ruta `/ingresos/gestion-anticipos`, proceso `ingresos.gestion-anticipos`. La página exige acceso (`requireAcceso`); leer pide `ver` y crear, editar, legalizar, borrar o importar piden `usar`, tanto en las server actions como en RLS (`20261029160000_permisos_por_proceso.sql`). Con `ver` la tabla se muestra sin acciones.
 
 ## Conexiones
 
