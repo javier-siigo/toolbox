@@ -6,7 +6,7 @@ Registro y seguimiento de **anticipos pendientes de legalizar**, por colaborador
 
 ## Acceso
 
-Ruta `/ingresos-egresos/gestion-anticipos`, proceso `ingresos.gestion-anticipos`. La página exige acceso (`requireAcceso`); leer pide `ver` y crear, editar, legalizar, borrar o importar piden `usar`, tanto en las server actions como en RLS (`20261029160000_permisos_por_proceso.sql`). Con `ver` la tabla se muestra sin acciones.
+Ruta `/ingresos-egresos/gestion-anticipos`, proceso `ingresos.gestion-anticipos`. La página exige acceso (`requireAcceso`); leer pide `ver` y crear, editar, legalizar, borrar o importar piden `usar`, tanto en las server actions como en RLS (`20261029160000_permisos_por_proceso.sql`). Con `ver` la tabla y el detalle se muestran sin acciones.
 
 ## Conexiones
 
@@ -28,6 +28,7 @@ Tabla `anticipos.registros`:
 | `falta` | enum `anticipos_falta_enum` | Qué falta para legalizar |
 | `observacion_1` | enum `anticipos_observacion_1_enum` | Estado de la gestión de contacto |
 | `observacion_2` | texto (≤ 500), opcional | Nota libre |
+| `valor` | numeric(14,0) ≥ 0, opcional | Valor del anticipo en pesos (migración `20261103120000`). El formulario acepta `1500000`, `1.500.000` o `$ 1.500.000` |
 | `fecha_rq` | fecha `YYYY-MM-DD` | Fecha del requerimiento |
 | `fecha_gestion` | fecha, opcional | Fecha de la última gestión |
 | `nombre_normalizado` | generada | Nombre sin tildes/mayúsculas, tokens ordenados |
@@ -69,13 +70,14 @@ Validaciones: `fecha_rq` debe ser una fecha válida; `fecha_gestion` puede ir va
 
 ## Interfaz
 
-`src/components/anticipos/`
+`src/components/anticipos/` — mismo esquema que [Servicios públicos](07-servicios-publicos.md) (reusa `Indicador`, `FiltroSelect` y `AlertaIndicador` de `servicios-publicos/bits.tsx`).
 
-- **Indicadores** calculados en el cliente sobre las filas: *pendientes* (`falta ≠ legalizado`), *devoluciones* (`falta = devolucion`), *legalizados*, *excolaboradores* y **valor total** de los retirados que siguen pendientes (`Σ retiro_info.valor`).
-- **Tabla** (TanStack Table) con búsqueda global, filtros por `falta` y `observacion_1`, filtro **"solo retirados"**, paginación en el cliente (5 por defecto; opciones 5, 10, 20, 50, 100), texto truncado con tooltip y marca visual de excolaborador con detalle de la coincidencia.
-- **Formulario de alta** y **hoja lateral de edición**; **diálogo de confirmación** para eliminar.
-- Estado optimista local (`added`, `legalized`) para reflejar cambios antes de recargar.
-- Botón que abre la hoja **Importar excolaboradores** (ver [06](06-importacion-retirados.md)).
+- **Semáforo** (`src/lib/anticipos/seguimiento.ts`, única fuente de la regla): *Resuelto* (legalizado o con fecha de gestión), *En plazo* y *Atrasado* (≥ 10 días desde la fecha de RQ sin gestión). "Hoy" lo calcula el servidor en hora de Colombia. Lo usan la tabla, los indicadores, el detalle y el Excel.
+- **Indicadores** clicables (filtran la tabla): atrasados, sin resolver (con su valor), devoluciones, legalizados (% del total) y excolaboradores (valor pendiente según el reporte de Contabilidad).
+- **Tabla** (`anticipos-tabla.tsx`) ordenada por semáforo por defecto (atrasados primero, el más antiguo arriba); clic en un encabezado ordena asc → desc → por defecto. Las columnas se reparten el ancho disponible (`table-fixed`, sin scroll horizontal desde 720 px) y se ajustan arrastrando el borde del encabezado o con las flechas; el ancho se guarda en `localStorage` y doble clic lo restablece. Tabla con búsqueda y filtros por seguimiento, falta, observación 1 y tipo de colaborador. Pinta 50 filas y "Mostrar más". El pie muestra el conteo y el valor total de lo filtrado. "Legalizar" al final de cada fila pendiente.
+- **Panel lateral** (`anticipo-sheet.tsx`): al hacer clic en una fila muestra el detalle (datos, observación 2 y el reporte de Contabilidad si es excolaborador) con Legalizar / Editar / Eliminar. *Editar* cambia el mismo panel al formulario; *Nuevo registro* también abre en el panel.
+- **Descargar Excel** con las filas filtradas, en el orden de la tabla.
+- Botón **Importar/Actualizar retirados** (ver [06](06-importacion-retirados.md)).
 
 ## Cruce con excolaboradores
 
@@ -100,8 +102,8 @@ El resultado incluye `tokens_comunes` y `tokens_extra` para que el usuario pueda
 ## Archivos fuente
 
 - Página: `src/app/(app)/ingresos-egresos/gestion-anticipos/page.tsx`
-- UI: `src/components/anticipos/` (`anticipos-page`, `anticipos-data-table`, `columns`, `anticipos-form`, `anticipos-edit-sheet`, `anticipos-delete-dialog`, `data-table-features`, `truncated-text`, `importar-retirados/`)
-- Lógica: `src/lib/anticipos/{actions,schema,format}.ts`
+- UI: `src/components/anticipos/` (`anticipos-page`, `anticipo-sheet`, `anticipos-form`, `badges`, `legalizar-boton`, `tour`, `importar-retirados/`)
+- Lógica: `src/lib/anticipos/{actions,schema,format,seguimiento,export-excel}.ts`
 - SQL: `supabase/migrations/20261016120000_match_colaborador_retirado.sql`, `…130000_match_colaborador_retirado_batch.sql`, `20261029150000_retirados_tokens.sql`, `20261029190000_registros_retiro_materializado.sql`
 
 ## Hallazgos

@@ -12,9 +12,13 @@ export default async function GestionAnticiposPage() {
   const { nivel } = await requireAcceso(PROCESOS.GESTION_ANTICIPOS);
   const rows = await getAnticiposAll();
 
+  // "Hoy" en Colombia, calculado aquí para que el semáforo no dependa del reloj del navegador
+  // ni cambie entre el render del servidor y el del cliente.
+  const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
+
   return (
     <PageTransition>
-      <AnticiposPageClient rows={rows} soloLectura={nivel === "ver"} />
+      <AnticiposPageClient rows={rows} hoy={hoy} soloLectura={nivel === "ver"} />
     </PageTransition>
   );
 }

@@ -69,13 +69,22 @@ export function EstadoBadge({ estado, className }: { estado: EstadoRecibo; class
 }
 
 /** Semáforo: punto + nivel + motivo. */
-export function AlertaIndicador({ alerta, compacto = false }: { alerta: Alerta; compacto?: boolean }) {
+export function AlertaIndicador({
+  alerta,
+  compacto = false,
+  etiquetas = NIVEL_ALERTA_LABEL,
+}: {
+  alerta: Alerta;
+  compacto?: boolean;
+  /** Nombres de los niveles; por defecto los de servicios públicos. */
+  etiquetas?: Record<NivelAlerta, string>;
+}) {
   const tono = TONO_ALERTA[alerta.nivel];
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold", tono.text)}>
         <span aria-hidden className={cn("size-2 shrink-0 rounded-full", tono.dot)} />
-        {NIVEL_ALERTA_LABEL[alerta.nivel]}
+        {etiquetas[alerta.nivel]}
       </span>
       {!compacto && <span className="truncate text-xs text-muted-foreground">{alerta.motivo}</span>}
     </div>
@@ -202,6 +211,82 @@ export function PieVentana({ className, children }: { className?: string; childr
       )}
     >
       {children}
+    </div>
+  );
+}
+
+export type TonoIndicador = "default" | "success" | "warning" | "destructive" | "muted";
+
+const TONO_INDICADOR: Record<TonoIndicador, string> = {
+  default: "bg-primary/10 text-primary border-primary/15 dark:bg-primary/15 dark:text-primary-foreground/90 dark:border-primary/30",
+  success: "bg-emerald-100 text-emerald-700 border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/40",
+  warning: "bg-amber-100 text-amber-700 border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/40",
+  destructive: "bg-rose-100 text-rose-700 border-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/40",
+  muted: "bg-muted text-muted-foreground border-border",
+};
+
+/** KPI como botón: al hacer clic filtra la tabla. Lo usan servicios públicos y anticipos. */
+export function Indicador({
+  icon,
+  label,
+  value,
+  tone,
+  detalle,
+  activo,
+  onClick,
+  accion,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  tone: TonoIndicador;
+  detalle?: string;
+  activo: boolean;
+  onClick: () => void;
+  /** Acción secundaria al pie de la tarjeta (p. ej. "Actualizar reporte →"). Va fuera del botón de filtro. */
+  accion?: React.ReactNode;
+}) {
+  const marco = cn(
+    "rounded-lg border bg-card p-4 text-left shadow-sm transition-colors hover:border-primary/40",
+    activo ? "border-primary ring-1 ring-primary/30" : "border-border",
+  );
+  const contenido = (
+    <>
+      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-md border", TONO_INDICADOR[tone])} aria-hidden>
+        {icon}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className={cn(ETIQUETA, "truncate py-px")}>{label}</span>
+        <span className="font-mono text-xl font-semibold tabular-nums text-foreground">{value}</span>
+        {detalle && <span className="truncate text-xs text-muted-foreground">{detalle}</span>}
+      </span>
+    </>
+  );
+
+  if (!accion) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={activo}
+        className={cn(marco, "flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
+      >
+        {contenido}
+      </button>
+    );
+  }
+
+  return (
+    <div className={cn(marco, "flex flex-col gap-2")}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={activo}
+        className="-m-1 flex items-center gap-3 rounded-md p-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {contenido}
+      </button>
+      <div className="flex justify-end">{accion}</div>
     </div>
   );
 }

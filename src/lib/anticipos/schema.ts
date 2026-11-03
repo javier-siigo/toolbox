@@ -55,6 +55,16 @@ function isValidIsoDate(value: string): boolean {
   );
 }
 
+/**
+ * Convierte el valor escrito en el formulario ("1.500.000", "$ 1500000") a pesos enteros.
+ * Devuelve null si está vacío o no es un número válido.
+ */
+export function parseAnticipoValor(value: string): number | null {
+  const limpio = value.replace(/[$\s.]/g, "");
+  if (!/^\d{1,14}$/.test(limpio)) return null;
+  return Number(limpio);
+}
+
 export const anticipoCreateSchema = z.object({
   nombre: z
     .string()
@@ -81,6 +91,12 @@ export const anticipoCreateSchema = z.object({
     .max(500, "Máximo 500 caracteres")
     .optional()
     .or(z.literal("")),
+  valor: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || parseAnticipoValor(v) !== null, {
+      message: "Ingresa un valor numérico en pesos",
+    }),
   fecha_rq: z.string().refine(isValidIsoDate, {
     message: "Fecha de RQ inválida",
   }),
@@ -141,6 +157,7 @@ export type AnticipoRow = {
   falta: AnticipoFalta;
   observacion_1: AnticipoObservacion1;
   observacion_2: string | null;
+  valor: number | null;
   fecha_rq: string;
   fecha_gestion: string | null;
   created_at: string;

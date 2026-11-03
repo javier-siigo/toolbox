@@ -1,210 +1,282 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import {
-  ArrowUpRight,
+  AlertTriangle,
   CheckCircle2,
+  Download,
   HandCoins,
+  Loader2,
   Plus,
+  Search,
   UserMinus,
   Wallet,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { SoloLectura } from "@/components/common/solo-lectura";
+import {
+  FiltroSelect,
+  Indicador,
+  TODOS,
+} from "@/components/servicios-publicos/bits";
 import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
-import { AnticiposDataTable } from "@/components/anticipos/anticipos-data-table";
-import { AnticiposDeleteDialog } from "@/components/anticipos/anticipos-delete-dialog";
-import { AnticiposEditSheet } from "@/components/anticipos/anticipos-edit-sheet";
-import { AnticiposFormSheet } from "@/components/anticipos/anticipos-form";
-import { ImportarRetiradosSheet } from "@/components/anticipos/importar-retirados/importar-retirados-sheet";
-import { TOUR_ANTICIPOS } from "@/components/anticipos/tour";
-import type { AnticipoRow } from "@/lib/anticipos/schema";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { descargarAnticiposExcel } from "@/lib/anticipos/export-excel";
+import { formatAnticipoCurrency } from "@/lib/anticipos/format";
+import {
+  ANTICIPOS_FALTA_OPTIONS,
+  ANTICIPOS_OBSERVACION_1_OPTIONS,
+  type AnticipoRow,
+} from "@/lib/anticipos/schema";
+import {
+  DIAS_ATRASO,
+  NIVEL_SEGUIMIENTO_LABEL,
+  PESO_SEGUIMIENTO,
+  seguimientoDe,
+  type Seguimiento,
+} from "@/lib/anticipos/seguimiento";
+import type { NivelAlerta } from "@/lib/servicios-publicos/alertas";
 
-const HIGHLIGHT_ADD_MS = 720;
-const HIGHLIGHT_LEGALIZE_MS = 640;
+import { AnticipoSheet, type ModoSheet } from "./anticipo-sheet";
+import { AnticiposTabla, ordenarFilas, type Orden } from "./anticipos-tabla";
+import { ImportarRetiradosSheet } from "./importar-retirados/importar-retirados-sheet";
+import { TOUR_ANTICIPOS } from "./tour";
 
-function isPendienteFalta(value: AnticipoRow["falta"]): boolean {
-  return value !== "legalizado";
+interface Filtros {
+  falta: string;
+  observacion: string;
+  seguimiento: string;
+  colaborador: string;
+  q: string;
 }
 
-function isDevolucionFalta(value: AnticipoRow["falta"]): boolean {
-  return value === "devolucion";
+const FILTROS_INICIALES: Filtros = {
+  falta: TODOS,
+  observacion: TODOS,
+  seguimiento: TODOS,
+  colaborador: TODOS,
+  q: "",
+};
+
+/** `pendiente` agrupa atrasados y en plazo: todo lo que aún no se ha resuelto. */
+const PENDIENTE = "pendiente";
+
+const SEGUIMIENTO_OPCIONES = [
+  { value: PENDIENTE, label: "Sin resolver" },
+  ...(["revisar", "atencion", "ok"] as NivelAlerta[]).map((n) => ({
+    value: n,
+    label: NIVEL_SEGUIMIENTO_LABEL[n],
+  })),
+];
+
+function cumpleSeguimiento(nivel: NivelAlerta | undefined, filtro: string): boolean {
+  if (filtro === TODOS) return true;
+  if (filtro === PENDIENTE) return nivel !== "ok";
+  return nivel === filtro;
 }
 
-function isLegalizadoFalta(value: AnticipoRow["falta"]): boolean {
-  return value === "legalizado";
-}
+const COLABORADOR_OPCIONES = [
+  { value: "activos", label: "Activos" },
+  { value: "excolaboradores", label: "Excolaboradores" },
+];
+
+/** Filas que se pintan de entrada; "Mostrar más" agrega otro bloque. */
+const BLOQUE = 50;
+
+/** La sheet guarda solo el id: la fila se lee de `rows` para mostrar siempre lo último. */
+type EstadoSheet = { tipo: "nuevo" } | { tipo: "detalle" | "editar"; id: string };
 
 /** `soloLectura` (nivel `ver`): consulta la tabla sin crear, editar, legalizar ni importar. */
 export function AnticiposPageClient({
   rows,
+  hoy,
   soloLectura = false,
 }: {
   rows: AnticipoRow[];
+  /** `YYYY-MM-DD` en hora de Colombia. */
+  hoy: string;
   soloLectura?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [filtros, setFiltros] = useState<Filtros>(FILTROS_INICIALES);
+  const [sheet, setSheet] = useState<EstadoSheet | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [editingRow, setEditingRow] = useState<AnticipoRow | null>(null);
-  const [deletingRow, setDeletingRow] = useState<AnticipoRow | null>(null);
-  const [highlightedRowIds, setHighlightedRowIds] = useState<{
-    added: Set<string>;
-    legalized: Set<string>;
-  }>({ added: new Set(), legalized: new Set() });
+  const [limite, setLimite] = useState(BLOQUE);
+  const [orden, setOrden] = useState<Orden>(null);
+  const [exportando, startExport] = useTransition();
 
-  const prevRowsRef = useRef<AnticipoRow[]>([]);
-  const highlightTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(
-    new Set(),
+  const set = (cambio: Partial<Filtros>) => {
+    setFiltros((f) => ({ ...f, ...cambio }));
+    setLimite(BLOQUE);
+  };
+  const aplicar = (cambio: Partial<Filtros>) => {
+    setFiltros({ ...FILTROS_INICIALES, ...cambio });
+    setLimite(BLOQUE);
+  };
+
+  const seguimientos = useMemo(
+    () => new Map<string, Seguimiento>(rows.map((r) => [r.id, seguimientoDe(r, hoy)])),
+    [rows, hoy],
   );
 
-  useEffect(() => {
-    const prevById = new Map(prevRowsRef.current.map((r) => [r.id, r]));
-    const initialMount = prevRowsRef.current.length === 0;
-    const newIds: string[] = [];
-    const newlyLegalizedIds: string[] = [];
-    for (const row of rows) {
-      const prev = prevById.get(row.id);
-      if (!prev) {
-        if (!initialMount) newIds.push(row.id);
-        continue;
+  // ─── Indicadores (todos los registros, sin filtros) ───
+  const indicadores = useMemo(() => {
+    let atrasados = 0;
+    let pendientes = 0;
+    let valorPendiente = 0;
+    let devoluciones = 0;
+    let legalizados = 0;
+    let excolaboradores = 0;
+    let valorRetirados = 0;
+    for (const r of rows) {
+      const nivel = seguimientos.get(r.id)?.nivel;
+      if (nivel === "revisar") atrasados++;
+      if (nivel !== "ok") {
+        pendientes++;
+        valorPendiente += r.valor ?? 0;
       }
-      if (prev.falta !== "legalizado" && row.falta === "legalizado") {
-        newlyLegalizedIds.push(row.id);
+      if (r.falta === "devolucion") devoluciones++;
+      if (r.falta === "legalizado") legalizados++;
+      if (r.es_retirado) {
+        excolaboradores++;
+        if (r.falta !== "legalizado") valorRetirados += r.retiro_info?.valor ?? 0;
       }
     }
+    const tasa = rows.length === 0 ? 0 : Math.round((legalizados / rows.length) * 100);
+    return { atrasados, pendientes, valorPendiente, devoluciones, legalizados, tasa, excolaboradores, valorRetirados };
+  }, [rows, seguimientos]);
 
-    if (newIds.length > 0 || newlyLegalizedIds.length > 0) {
-      setHighlightedRowIds((prev) => {
-        const added = new Set(prev.added);
-        const legalized = new Set(prev.legalized);
-        for (const id of newIds) added.add(id);
-        for (const id of newlyLegalizedIds) legalized.add(id);
-        return { added, legalized };
+  const filas = useMemo(() => {
+    const q = filtros.q.trim().toLowerCase();
+    return rows
+      .filter((r) => {
+        if (filtros.falta !== TODOS && r.falta !== filtros.falta) return false;
+        if (filtros.observacion !== TODOS && r.observacion_1 !== filtros.observacion) return false;
+        if (!cumpleSeguimiento(seguimientos.get(r.id)?.nivel, filtros.seguimiento)) return false;
+        if (filtros.colaborador === "activos" && r.es_retirado) return false;
+        if (filtros.colaborador === "excolaboradores" && !r.es_retirado) return false;
+        if (q && !`${r.nombre} ${r.requerimiento} ${r.observacion_2 ?? ""}`.toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const sa = seguimientos.get(a.id)!;
+        const sb = seguimientos.get(b.id)!;
+        const peso = PESO_SEGUIMIENTO[sa.nivel] - PESO_SEGUIMIENTO[sb.nivel];
+        if (peso !== 0) return peso;
+        // Pendientes: el más antiguo primero. Resueltos: el más reciente primero.
+        return sa.nivel === "ok" ? b.fecha_rq.localeCompare(a.fecha_rq) : a.fecha_rq.localeCompare(b.fecha_rq);
       });
+  }, [rows, filtros, seguimientos]);
 
-      for (const id of newIds) {
-        const timer = setTimeout(() => {
-          highlightTimersRef.current.delete(timer);
-          setHighlightedRowIds((prev) => {
-            if (!prev.added.has(id)) return prev;
-            const added = new Set(prev.added);
-            added.delete(id);
-            return { added, legalized: prev.legalized };
-          });
-        }, HIGHLIGHT_ADD_MS);
-        highlightTimersRef.current.add(timer);
-      }
+  const ordenadas = useMemo(() => ordenarFilas(filas, orden, seguimientos), [filas, orden, seguimientos]);
 
-      for (const id of newlyLegalizedIds) {
-        const timer = setTimeout(() => {
-          highlightTimersRef.current.delete(timer);
-          setHighlightedRowIds((prev) => {
-            if (!prev.legalized.has(id)) return prev;
-            const legalized = new Set(prev.legalized);
-            legalized.delete(id);
-            return { added: prev.added, legalized };
-          });
-        }, HIGHLIGHT_LEGALIZE_MS);
-        highlightTimersRef.current.add(timer);
-      }
-    }
+  const valorFiltrado = useMemo(() => filas.reduce((acc, r) => acc + (r.valor ?? 0), 0), [filas]);
 
-    prevRowsRef.current = rows;
-  }, [rows]);
+  const hayFiltros =
+    filtros.falta !== TODOS ||
+    filtros.observacion !== TODOS ||
+    filtros.seguimiento !== TODOS ||
+    filtros.colaborador !== TODOS ||
+    filtros.q !== "";
 
-  useEffect(() => {
-    return () => {
-      for (const timer of highlightTimersRef.current) clearTimeout(timer);
-      highlightTimersRef.current.clear();
-    };
+  const modoSheet = useMemo<ModoSheet | null>(() => {
+    if (!sheet) return null;
+    if (sheet.tipo === "nuevo") return sheet;
+    const row = rows.find((r) => r.id === sheet.id);
+    return row ? { tipo: sheet.tipo, row } : null;
+  }, [sheet, rows]);
+
+  const cerrarSheet = useCallback(() => setSheet(null), []);
+  const cambiarModo = useCallback((m: ModoSheet) => {
+    setSheet(m.tipo === "nuevo" ? m : { tipo: m.tipo, id: m.row.id });
   }, []);
 
-  const stats = useMemo(() => {
-    const total = rows.length;
-    const pendientes = rows.filter((r) => isPendienteFalta(r.falta)).length;
-    const devoluciones = rows.filter((r) => isDevolucionFalta(r.falta)).length;
-    const legalizados = rows.filter((r) => isLegalizadoFalta(r.falta)).length;
-    const tasaLegalizacion = total === 0 ? 0 : Math.round((legalizados / total) * 100);
-    const excolaboradores = rows.filter((r) => r.es_retirado).length;
-    const valorPendienteRetirados = rows
-      .filter((r) => r.es_retirado && isPendienteFalta(r.falta))
-      .reduce((acc, r) => acc + (r.retiro_info?.valor ?? 0), 0);
-    return {
-      total,
-      pendientes,
-      devoluciones,
-      legalizados,
-      tasaLegalizacion,
-      excolaboradores,
-      valorPendienteRetirados,
-    };
-  }, [rows]);
+  function exportar() {
+    startExport(async () => {
+      try {
+        await descargarAnticiposExcel({
+          rows: ordenadas,
+          totalRegistros: rows.length,
+          hoy,
+          filtros: {
+            busqueda: filtros.q,
+            falta: filtros.falta === TODOS ? "" : filtros.falta,
+            observacion1: filtros.observacion === TODOS ? "" : filtros.observacion,
+            seguimiento: filtros.seguimiento === TODOS ? "" : filtros.seguimiento,
+            colaborador: filtros.colaborador === TODOS ? "" : filtros.colaborador,
+          },
+        });
+      } catch (err) {
+        console.error("[anticipos] exportar excel", err);
+        toast.error("No se pudo generar el Excel. Intenta de nuevo.");
+      }
+    });
+  }
 
-  const valorFmt = useMemo(() => {
-    if (stats.valorPendienteRetirados <= 0) return null;
-    return new Intl.NumberFormat("es-CO", {
-      style: "currency",
-      currency: "COP",
-      maximumFractionDigits: 0,
-    }).format(stats.valorPendienteRetirados);
-  }, [stats.valorPendienteRetirados]);
-
-  const closeEdit = useCallback(() => setEditingRow(null), []);
-  const closeDelete = useCallback(() => setDeletingRow(null), []);
+  const visibles = ordenadas.slice(0, limite);
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" data-tour="kpis">
-        <KpiTile
-          icon={<HandCoins className="size-4" />}
-          label="Total registros"
-          value={stats.total}
-          tone="default"
-          staggerIndex={0}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" data-tour="indicadores">
+        <Indicador
+          icon={<AlertTriangle className="size-4" />}
+          label="Atrasados"
+          value={indicadores.atrasados}
+          tone={indicadores.atrasados > 0 ? "destructive" : "muted"}
+          detalle={`≥ ${DIAS_ATRASO} días sin gestión`}
+          activo={filtros.seguimiento === "revisar"}
+          onClick={() => aplicar({ seguimiento: "revisar" })}
         />
-        <KpiTile
+        <Indicador
           icon={<Wallet className="size-4" />}
-          label="Pendientes"
-          value={stats.pendientes}
+          label="Sin resolver"
+          value={indicadores.pendientes}
           tone="warning"
-          staggerIndex={1}
+          detalle={indicadores.valorPendiente > 0 ? formatAnticipoCurrency(indicadores.valorPendiente)! : "Sin fecha de gestión"}
+          activo={filtros.seguimiento === PENDIENTE}
+          onClick={() => aplicar({ seguimiento: PENDIENTE })}
         />
-        <KpiTile
-          icon={<ArrowUpRight className="size-4" />}
+        <Indicador
+          icon={<HandCoins className="size-4" />}
           label="Devoluciones"
-          value={stats.devoluciones}
-          tone="destructive"
-          staggerIndex={2}
+          value={indicadores.devoluciones}
+          tone="muted"
+          detalle="Falta: devolución"
+          activo={filtros.falta === "devolucion"}
+          onClick={() => aplicar({ falta: "devolucion" })}
         />
-        <KpiTile
+        <Indicador
           icon={<CheckCircle2 className="size-4" />}
           label="Legalizados"
-          value={stats.legalizados}
+          value={indicadores.legalizados}
           tone="success"
-          staggerIndex={3}
-          suffix={
-            stats.total > 0 ? (
-              <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
-                {stats.tasaLegalizacion}% del total
-              </span>
-            ) : null
-          }
+          detalle={rows.length > 0 ? `${indicadores.tasa}% de ${rows.length}` : "Sin registros"}
+          activo={filtros.falta === "legalizado"}
+          onClick={() => aplicar({ falta: "legalizado" })}
         />
-        <KpiTile
+        <Indicador
           icon={<UserMinus className="size-4" />}
           label="Excolaboradores"
-          value={stats.excolaboradores}
+          value={indicadores.excolaboradores}
           tone="muted"
-          staggerIndex={4}
-          suffix={
-            valorFmt ? (
-              <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
-                Pendiente: {valorFmt}
-              </span>
-            ) : null
+          detalle={
+            indicadores.valorRetirados > 0
+              ? `Pendiente ${formatAnticipoCurrency(indicadores.valorRetirados)}`
+              : undefined
           }
-          action={
+          activo={filtros.colaborador === "excolaboradores"}
+          onClick={() => aplicar({ colaborador: "excolaboradores" })}
+          accion={
             !soloLectura && (
               <Button
                 type="button"
@@ -214,120 +286,148 @@ export function AnticiposPageClient({
                 data-tour="importar"
                 className="h-auto p-0 text-xs font-medium text-muted-foreground hover:text-foreground"
               >
-                {stats.excolaboradores > 0
-                  ? "Actualizar reporte →"
-                  : "Importar reporte →"}
+                {indicadores.excolaboradores > 0 ? "Actualizar reporte →" : "Importar reporte →"}
               </Button>
             )
           }
         />
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col-reverse items-start justify-between gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <p className="text-sm text-muted-foreground">
-            Gestiona y legaliza los anticipos por colaborador y
-            requerimiento. Importa el reporte de Contabilidad para cruzar
-            excolaboradores retirados.
-          </p>
-          <div className="flex shrink-0 gap-2">
-            <ComoUsar steps={TOUR_ANTICIPOS} className="h-9" />
-            {!soloLectura && (
-              <Button type="button" onClick={() => setOpen(true)} data-tour="nuevo">
+      <div className="flex flex-col-reverse items-start justify-between gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <p className="text-sm text-muted-foreground">
+          Sigue cada anticipo por colaborador y requerimiento hasta legalizarlo. El semáforo indica qué revisar primero.
+        </p>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <ComoUsar steps={TOUR_ANTICIPOS} className="h-9" />
+          {!soloLectura && (
+            <>
+              <Button type="button" onClick={() => setSheet({ tipo: "nuevo" })} data-tour="nuevo">
                 <Plus className="size-4" />
                 Nuevo registro
               </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {soloLectura && <SoloLectura />}
+
+      {rows.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <HandCoins />
+            </EmptyMedia>
+            <EmptyTitle>Aún no hay anticipos</EmptyTitle>
+            <EmptyDescription>
+              Registra cada anticipo con el colaborador, el requerimiento y el valor. Después importa el reporte de
+              retirados de Contabilidad para marcar los de excolaboradores.
+            </EmptyDescription>
+          </EmptyHeader>
+          {!soloLectura && (
+            <EmptyContent>
+              <Button type="button" variant="outline" onClick={() => setSheet({ tipo: "nuevo" })}>
+                <Plus className="size-4" />
+                Registrar el primer anticipo
+              </Button>
+            </EmptyContent>
+          )}
+        </Empty>
+      ) : (
+        <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center" data-tour="filtros">
+            <div className="relative w-full sm:w-64" data-tour="buscar">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={filtros.q}
+                onChange={(e) => set({ q: e.target.value })}
+                placeholder="Buscar colaborador o requerimiento"
+                aria-label="Buscar colaborador o requerimiento"
+                className="h-9 pl-9"
+              />
+            </div>
+            <FiltroSelect
+              label="Seguimiento"
+              value={filtros.seguimiento}
+              onChange={(v) => set({ seguimiento: v })}
+              options={SEGUIMIENTO_OPCIONES}
+            />
+            <FiltroSelect
+              label="Falta"
+              value={filtros.falta}
+              onChange={(v) => set({ falta: v })}
+              options={ANTICIPOS_FALTA_OPTIONS}
+              todosLabel="Todas"
+            />
+            <FiltroSelect
+              label="Observación"
+              value={filtros.observacion}
+              onChange={(v) => set({ observacion: v })}
+              options={ANTICIPOS_OBSERVACION_1_OPTIONS}
+              todosLabel="Todas"
+            />
+            <FiltroSelect
+              label="Colaborador"
+              value={filtros.colaborador}
+              onChange={(v) => set({ colaborador: v })}
+              options={COLABORADOR_OPCIONES}
+            />
+            {hayFiltros && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => aplicar({})}>
+                <X className="size-3.5" />
+                Limpiar filtros
+              </Button>
             )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={exportar}
+              disabled={exportando || filas.length === 0}
+              data-tour="exportar"
+              className="h-9 sm:ml-auto"
+            >
+              {exportando ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+              {exportando ? "Generando…" : "Descargar Excel"}
+            </Button>
           </div>
-        </div>
 
-        {soloLectura && <SoloLectura />}
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm" data-tour="tabla">
+            <AnticiposTabla
+              filas={visibles}
+              seguimientos={seguimientos}
+              soloLectura={soloLectura}
+              orden={orden}
+              onOrden={(o) => {
+                setOrden(o);
+                setLimite(BLOQUE);
+              }}
+              onAbrir={(id) => setSheet({ tipo: "detalle", id })}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+              <span className="tabular-nums">
+                {filas.length === rows.length
+                  ? `${filas.length} ${filas.length === 1 ? "registro" : "registros"}`
+                  : `${filas.length} de ${rows.length} registros`}
+                {valorFiltrado > 0 && (
+                  <>
+                    {" · "}
+                    <span className="font-mono">{formatAnticipoCurrency(valorFiltrado)}</span>
+                  </>
+                )}
+              </span>
+              {filas.length > limite && (
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setLimite((l) => l + BLOQUE)}>
+                  Mostrar {Math.min(BLOQUE, filas.length - limite)} más
+                </Button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
-        <AnticiposDataTable
-          rows={rows}
-          onEdit={soloLectura ? undefined : setEditingRow}
-          onDelete={soloLectura ? undefined : setDeletingRow}
-          highlightedRowIds={highlightedRowIds}
-        />
-      </div>
-
-      <AnticiposFormSheet open={open} onOpenChange={setOpen} />
+      <AnticipoSheet modo={modoSheet} hoy={hoy} soloLectura={soloLectura} onModo={cambiarModo} onClose={cerrarSheet} />
       <ImportarRetiradosSheet open={importOpen} onOpenChange={setImportOpen} />
-      <AnticiposEditSheet
-        row={editingRow}
-        open={Boolean(editingRow)}
-        onOpenChange={closeEdit}
-      />
-      <AnticiposDeleteDialog
-        row={deletingRow}
-        open={Boolean(deletingRow)}
-        onOpenChange={closeDelete}
-      />
-    </div>
-  );
-}
-
-type KpiTone = "default" | "success" | "warning" | "destructive" | "muted";
-
-interface KpiTileProps {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  tone?: KpiTone;
-  suffix?: React.ReactNode;
-  action?: React.ReactNode;
-  staggerIndex: number;
-}
-
-const TONE_CLASSES: Record<KpiTone, string> = {
-  default:
-    "bg-primary/10 text-primary border-primary/15 dark:bg-primary/15 dark:text-primary-foreground/90 dark:border-primary/30",
-  success:
-    "bg-emerald-100 text-emerald-700 border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/40",
-  warning:
-    "bg-amber-100 text-amber-700 border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/40",
-  destructive:
-    "bg-rose-100 text-rose-700 border-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/40",
-  muted:
-    "bg-muted text-muted-foreground border-border",
-};
-
-function KpiTile({
-  icon,
-  label,
-  value,
-  tone = "default",
-  suffix,
-  action,
-  staggerIndex,
-}: KpiTileProps) {
-  return (
-    <div
-      className="kpi-tile-stagger flex flex-col gap-2 rounded-lg border border-border bg-card p-4 shadow-sm"
-      style={{ animationDelay: `${staggerIndex * 40}ms` }}
-    >
-      <div className="flex items-center gap-3">
-        <div
-          className={`flex size-9 shrink-0 items-center justify-center rounded-md border ${TONE_CLASSES[tone]}`}
-          aria-hidden
-        >
-          {icon}
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {label}
-          </span>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-xl font-semibold tabular-nums text-foreground">
-              {value}
-            </span>
-            {suffix}
-          </div>
-        </div>
-      </div>
-      {action ? (
-        <div className="flex justify-end">{action}</div>
-      ) : null}
     </div>
   );
 }

@@ -34,6 +34,7 @@ export type Database = {
           retiro_tokens_extra: string[] | null
           updated_at: string
           updated_by: string
+          valor: number | null
         }
         Insert: {
           created_at?: string
@@ -52,6 +53,7 @@ export type Database = {
           retiro_tokens_extra?: string[] | null
           updated_at?: string
           updated_by: string
+          valor?: number | null
         }
         Update: {
           created_at?: string
@@ -70,6 +72,7 @@ export type Database = {
           retiro_tokens_extra?: string[] | null
           updated_at?: string
           updated_by?: string
+          valor?: number | null
         }
         Relationships: [
           {

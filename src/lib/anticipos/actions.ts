@@ -9,6 +9,7 @@ import {
   anticipoCreateSchema,
   anticipoIdSchema,
   anticipoUpdateSchema,
+  parseAnticipoValor,
   type AnticipoCreateField,
   type AnticipoCreateInput,
   type AnticipoRow,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/anticipos/schema";
 
 const REGISTRO_COLUMNS =
-  "id, nombre, requerimiento, falta, observacion_1, observacion_2, fecha_rq, fecha_gestion, created_at, es_retirado, retiro_nivel, retiro_tokens_comunes, retiro_tokens_extra, retirado:retirados(cedula, nombre, valor, observacion, fecha_reporte)";
+  "id, nombre, requerimiento, falta, observacion_1, observacion_2, valor, fecha_rq, fecha_gestion, created_at, es_retirado, retiro_nivel, retiro_tokens_comunes, retiro_tokens_extra, retirado:retirados(cedula, nombre, valor, observacion, fecha_reporte)";
 
 /**
  * El cruce con excolaboradores ya viene calculado en cada registro (triggers en la BD:
@@ -77,6 +78,7 @@ export async function createAnticipo(
     falta: String(formData.get("falta") ?? ""),
     observacion_1: String(formData.get("observacion_1") ?? ""),
     observacion_2: String(formData.get("observacion_2") ?? ""),
+    valor: String(formData.get("valor") ?? ""),
     fecha_rq: String(formData.get("fecha_rq") ?? ""),
     fecha_gestion: String(formData.get("fecha_gestion") ?? ""),
   };
@@ -105,6 +107,7 @@ export async function createAnticipo(
     falta: payload.falta,
     observacion_1: payload.observacion_1,
     observacion_2: payload.observacion_2 ? payload.observacion_2 : null,
+    valor: parseAnticipoValor(payload.valor),
     fecha_rq: payload.fecha_rq,
     fecha_gestion:
       payload.fecha_gestion === "" ? null : payload.fecha_gestion,
@@ -148,6 +151,7 @@ export async function updateAnticipo(
     falta: String(formData.get("falta") ?? ""),
     observacion_1: String(formData.get("observacion_1") ?? ""),
     observacion_2: String(formData.get("observacion_2") ?? ""),
+    valor: String(formData.get("valor") ?? ""),
     fecha_rq: String(formData.get("fecha_rq") ?? ""),
     fecha_gestion: String(formData.get("fecha_gestion") ?? ""),
   };
@@ -178,6 +182,7 @@ export async function updateAnticipo(
       falta: payload.falta,
       observacion_1: payload.observacion_1,
       observacion_2: payload.observacion_2 ? payload.observacion_2 : null,
+      valor: parseAnticipoValor(payload.valor),
       fecha_rq: payload.fecha_rq,
       fecha_gestion:
         payload.fecha_gestion === "" ? null : payload.fecha_gestion,

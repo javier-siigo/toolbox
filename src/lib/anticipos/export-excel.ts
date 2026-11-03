@@ -3,12 +3,12 @@ import type ExcelJS from "exceljs";
 import {
   ANTICIPOS_FALTA_LABELS,
   ANTICIPOS_OBSERVACION_1_LABELS,
-  daysSinceIsoDate,
   todayIsoDate,
   type AnticipoFalta,
   type AnticipoObservacion1,
   type AnticipoRow,
 } from "@/lib/anticipos/schema";
+import { DIAS_ATRASO, NIVEL_SEGUIMIENTO_LABEL, seguimientoDe as seguimientoBase } from "@/lib/anticipos/seguimiento";
 
 /**
  * Reporte .xlsx de Gestión y Legalización de Anticipos, generado en el
@@ -21,11 +21,11 @@ export interface AnticiposExportFiltros {
   busqueda: string;
   falta: string;
   observacion1: string;
-  soloRetirados: boolean;
+  /** Nivel del semáforo (`revisar`, `atencion`, `ok`) o `pendiente`. */
+  seguimiento: string;
+  /** `activos` | `excolaboradores`. */
+  colaborador: string;
 }
-
-/** Igual que la columna Fecha RQ: atrasado a los 10 días sin gestión. */
-const DIAS_ATRASO = 10;
 
 const MATCH_LABELS: Record<NonNullable<AnticipoRow["retiro_info"]>["nivel"], string> = {
   exacto: "Exacta",
@@ -86,15 +86,9 @@ const TONO_SEGUIMIENTO: Record<Seguimiento, Tono> = {
   "En plazo": TONOS.neutro,
 };
 
-function esResuelto(r: AnticipoRow): boolean {
-  return r.falta === "legalizado" || r.observacion_1 === "legalizado" || r.fecha_gestion !== null;
-}
-
-function seguimientoDe(r: AnticipoRow): { estado: Seguimiento; dias: number | null } {
-  if (esResuelto(r)) return { estado: "Resuelto", dias: null };
-  const dias = daysSinceIsoDate(r.fecha_rq);
-  if (dias < 0) return { estado: "En plazo", dias: null };
-  return { estado: dias >= DIAS_ATRASO ? "Atrasado" : "En plazo", dias };
+function seguimientoDe(r: AnticipoRow, hoy: string): { estado: Seguimiento; dias: number | null } {
+  const s = seguimientoBase(r, hoy);
+  return { estado: NIVEL_SEGUIMIENTO_LABEL[s.nivel] as Seguimiento, dias: s.dias };
 }
 
 /** Fecha ISO como `Date` UTC: exceljs la escribe sin corrimiento de zona. */
@@ -130,7 +124,12 @@ function describirFiltros(f: AnticiposExportFiltros): string {
       `Observación 1: ${ANTICIPOS_OBSERVACION_1_LABELS[f.observacion1 as AnticipoObservacion1] ?? f.observacion1}`,
     );
   }
-  if (f.soloRetirados) partes.push("Solo excolaboradores");
+  if (f.seguimiento) {
+    const nivel = f.seguimiento as keyof typeof NIVEL_SEGUIMIENTO_LABEL;
+    partes.push(`Seguimiento: ${f.seguimiento === "pendiente" ? "Sin resolver" : (NIVEL_SEGUIMIENTO_LABEL[nivel] ?? f.seguimiento)}`);
+  }
+  if (f.colaborador === "excolaboradores") partes.push("Solo excolaboradores");
+  if (f.colaborador === "activos") partes.push("Solo colaboradores activos");
   return partes.length === 0 ? "Sin filtros" : partes.join(" · ");
 }
 
@@ -179,6 +178,7 @@ function escribirResumen(
   wb: ExcelJS.Workbook,
   rows: AnticipoRow[],
   subtitulo: string,
+  hoy: string,
 ) {
   const hoja = wb.addWorksheet("Resumen", {
     views: [{ showGridLines: false }],
@@ -192,11 +192,16 @@ function escribirResumen(
   const legalizados = rows.filter((r) => r.falta === "legalizado").length;
   const pendientes = total - legalizados;
   const devoluciones = rows.filter((r) => r.falta === "devolucion").length;
-  const atrasados = rows.filter((r) => seguimientoDe(r).estado === "Atrasado").length;
+  const atrasados = rows.filter((r) => seguimientoDe(r, hoy).estado === "Atrasado").length;
   const retirados = rows.filter((r) => r.es_retirado);
   const valorPendienteRetirados = retirados
     .filter((r) => r.falta !== "legalizado")
     .reduce((acc, r) => acc + (r.retiro_info?.valor ?? 0), 0);
+
+  const valorTotal = rows.reduce((acc, r) => acc + (r.valor ?? 0), 0);
+  const valorPendiente = rows
+    .filter((r) => r.falta !== "legalizado")
+    .reduce((acc, r) => acc + (r.valor ?? 0), 0);
 
   const pct = (n: number) => (total === 0 ? 0 : n / total);
 
@@ -257,6 +262,8 @@ function escribirResumen(
     tono: TONOS.peligro,
   });
   linea("Excolaboradores", retirados.length, { porcentaje: pct(retirados.length), tono: TONOS.neutro });
+  linea("Valor total de anticipos", valorTotal, { fmt: FMT_MONEDA });
+  linea("Valor pendiente por legalizar", valorPendiente, { fmt: FMT_MONEDA });
   linea("Valor pendiente de excolaboradores", valorPendienteRetirados, { fmt: FMT_MONEDA });
 
   fila++;
@@ -291,6 +298,7 @@ const COLUMNAS_DETALLE: ColumnaDetalle[] = [
   { header: "#", width: 6, align: "center" },
   { header: "Colaborador", width: 34 },
   { header: "Requerimiento", width: 18 },
+  { header: "Valor anticipo", width: 16, fmt: FMT_MONEDA, align: "right" },
   { header: "Falta", width: 28, align: "center" },
   { header: "Observación 1", width: 20, align: "center" },
   { header: "Observación 2", width: 42, wrap: true },
@@ -300,21 +308,22 @@ const COLUMNAS_DETALLE: ColumnaDetalle[] = [
   { header: "Días sin gestión", width: 11, fmt: FMT_ENTERO, align: "center" },
   { header: "Excolaborador", width: 13, align: "center" },
   { header: "Cédula", width: 14, fmt: FMT_ENTERO, align: "right" },
-  { header: "Valor anticipo", width: 16, fmt: FMT_MONEDA, align: "right" },
+  { header: "Valor reportado (Contab.)", width: 16, fmt: FMT_MONEDA, align: "right" },
   { header: "Coincidencia", width: 22, align: "center" },
   { header: "Obs. Contabilidad", width: 40, wrap: true },
 ];
 
 const COL = {
-  falta: 4,
-  observacion1: 5,
-  seguimiento: 9,
-  dias: 10,
-  excolaborador: 11,
-  valor: 13,
+  valor: 4,
+  falta: 5,
+  observacion1: 6,
+  seguimiento: 10,
+  dias: 11,
+  excolaborador: 12,
+  valorRetiro: 14,
 } as const;
 
-function escribirDetalle(wb: ExcelJS.Workbook, rows: AnticipoRow[], subtitulo: string) {
+function escribirDetalle(wb: ExcelJS.Workbook, rows: AnticipoRow[], subtitulo: string, hoy: string) {
   const ncols = COLUMNAS_DETALLE.length;
   const filaCabecera = 4;
   const hoja = wb.addWorksheet("Detalle", {
@@ -338,13 +347,14 @@ function escribirDetalle(wb: ExcelJS.Workbook, rows: AnticipoRow[], subtitulo: s
   estiloCabecera(cab);
 
   rows.forEach((r, i) => {
-    const seg = seguimientoDe(r);
+    const seg = seguimientoDe(r, hoy);
     const retiro = r.retiro_info;
     const row = hoja.getRow(filaCabecera + 1 + i);
     row.values = [
       i + 1,
       r.nombre,
       r.requerimiento,
+      r.valor,
       ANTICIPOS_FALTA_LABELS[r.falta],
       ANTICIPOS_OBSERVACION_1_LABELS[r.observacion_1],
       r.observacion_2 ?? "",
@@ -383,21 +393,25 @@ function escribirDetalle(wb: ExcelJS.Workbook, rows: AnticipoRow[], subtitulo: s
   const primera = filaCabecera + 1;
   const ultima = filaCabecera + rows.length;
 
-  // Total que respeta el autofiltro de Excel (SUBTOTAL ignora filas ocultas).
+  // Totales que respetan el autofiltro de Excel (SUBTOTAL ignora filas ocultas).
   if (rows.length > 0) {
     const totalRow = hoja.getRow(ultima + 1);
-    const letraValor = hoja.getColumn(COL.valor).letter;
     hoja.mergeCells(ultima + 1, 1, ultima + 1, COL.valor - 1);
     const etiqueta = totalRow.getCell(1);
-    etiqueta.value = "Total valor anticipos de excolaboradores (filas visibles)";
+    etiqueta.value = "Total (filas visibles)";
     etiqueta.alignment = { vertical: "middle", horizontal: "right", indent: 1 };
-    const total = totalRow.getCell(COL.valor);
-    total.value = {
-      formula: `SUBTOTAL(109,${letraValor}${primera}:${letraValor}${ultima})`,
-      result: rows.reduce((acc, r) => acc + (r.retiro_info?.valor ?? 0), 0),
+    const subtotal = (col: number, result: number) => {
+      const letra = hoja.getColumn(col).letter;
+      const cell = totalRow.getCell(col);
+      cell.value = {
+        formula: `SUBTOTAL(109,${letra}${primera}:${letra}${ultima})`,
+        result,
+      };
+      cell.numFmt = FMT_MONEDA;
+      cell.alignment = { vertical: "middle", horizontal: "right" };
     };
-    total.numFmt = FMT_MONEDA;
-    total.alignment = { vertical: "middle", horizontal: "right" };
+    subtotal(COL.valor, rows.reduce((acc, r) => acc + (r.valor ?? 0), 0));
+    subtotal(COL.valorRetiro, rows.reduce((acc, r) => acc + (r.retiro_info?.valor ?? 0), 0));
     for (let j = 1; j <= ncols; j++) {
       const cell = totalRow.getCell(j);
       cell.fill = fill(C.primarioSuave);
@@ -430,9 +444,11 @@ function descargar(buffer: ArrayBuffer, fileName: string) {
 export async function descargarAnticiposExcel(params: {
   rows: AnticipoRow[];
   totalRegistros: number;
+  /** `YYYY-MM-DD` en hora de Colombia, el mismo del semáforo de la página. */
+  hoy?: string;
   filtros: AnticiposExportFiltros;
 }): Promise<void> {
-  const { rows, totalRegistros, filtros } = params;
+  const { rows, totalRegistros, filtros, hoy = todayIsoDate() } = params;
   const { default: ExcelJSLib } = await import("exceljs");
 
   const wb = new ExcelJSLib.Workbook();
@@ -446,8 +462,8 @@ export async function descargarAnticiposExcel(params: {
       : `${rows.length} de ${totalRegistros} registros`;
   const subtitulo = `Generado el ${fechaHoraGeneracion()} · ${registros} · ${describirFiltros(filtros)}`;
 
-  escribirResumen(wb, rows, subtitulo);
-  escribirDetalle(wb, rows, subtitulo);
+  escribirResumen(wb, rows, subtitulo, hoy);
+  escribirDetalle(wb, rows, subtitulo, hoy);
 
   const buffer = await wb.xlsx.writeBuffer();
   descargar(buffer as ArrayBuffer, `anticipos_${todayIsoDate()}.xlsx`);

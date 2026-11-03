@@ -1,28 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { startTransition, useActionState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import type * as React from "react";
+import { Controller } from "react-hook-form";
 import type { FieldValues, Path, UseFormReturn } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Save } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -33,15 +16,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   ANTICIPOS_FALTA_OPTIONS,
   ANTICIPOS_OBSERVACION_1_OPTIONS,
-  anticipoCreateSchema,
   todayIsoDate,
   type AnticipoCreateInput,
 } from "@/lib/anticipos/schema";
-import { createAnticipo, type CreateAnticipoState } from "@/lib/anticipos/actions";
 import { cn } from "@/lib/utils";
 
 type AnticiposFormErrorShape = {
@@ -50,6 +30,7 @@ type AnticiposFormErrorShape = {
   falta?: { message?: string };
   observacion_1?: { message?: string };
   observacion_2?: { message?: string };
+  valor?: { message?: string };
   fecha_rq?: { message?: string };
   fecha_gestion?: { message?: string };
 };
@@ -190,6 +171,41 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
                   <FieldHint>
                     Identificador de la solicitud en Siigo o NetSuite.
                   </FieldHint>
+                </span>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="anticipo-valor">
+                Valor del anticipo
+                <OptionalMark />
+              </Label>
+              <div className="relative">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground"
+                >
+                  $
+                </span>
+                <Input
+                  id="anticipo-valor"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="Ej. 1.500.000"
+                  className="pl-7 font-mono tabular-nums"
+                  aria-describedby={
+                    errs.valor ? "anticipo-valor-error" : "anticipo-valor-hint"
+                  }
+                  aria-invalid={Boolean(errs.valor)}
+                  {...register("valor" as Path<T>)}
+                />
+              </div>
+              {errs.valor?.message ? (
+                <FieldError id="anticipo-valor-error">
+                  {errs.valor.message}
+                </FieldError>
+              ) : (
+                <span id="anticipo-valor-hint">
+                  <FieldHint>En pesos colombianos, sin decimales.</FieldHint>
                 </span>
               )}
             </div>
@@ -404,113 +420,9 @@ const DEFAULT_VALUES: AnticipoCreateInput = {
   falta: "permisos_de_soportes",
   observacion_1: "no_se_ha_contactado",
   observacion_2: "",
+  valor: "",
   fecha_rq: todayIsoDate(),
   fecha_gestion: "",
 };
-
-export function AnticiposFormSheet({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (next: boolean) => void;
-}) {
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
-
-  const [state, formAction] = useActionState<
-    CreateAnticipoState | undefined,
-    FormData
-  >(createAnticipo, undefined);
-
-  const form = useForm<AnticipoCreateInput>({
-    resolver: zodResolver(anticipoCreateSchema),
-    mode: "onTouched",
-    defaultValues: DEFAULT_VALUES,
-  });
-
-  const { reset, setError } = form;
-
-  useEffect(() => {
-    if (!state) return;
-    if (state.fieldErrors) {
-      for (const [key, message] of Object.entries(state.fieldErrors)) {
-        if (message) {
-          setError(key as keyof AnticipoCreateInput, { message });
-        }
-      }
-    }
-    if (state.error && !state.fieldErrors) {
-      toast.error(state.error);
-    }
-    if (state.ok) {
-      toast.success("Registro creado");
-      reset(DEFAULT_VALUES);
-      onOpenChange(false);
-    }
-  }, [state, setError, reset, onOpenChange]);
-
-  function onValidSubmit(values: AnticipoCreateInput) {
-    const fd = new FormData();
-    for (const [key, value] of Object.entries(values)) {
-      if (value === undefined || value === null) continue;
-      fd.set(key, String(value));
-    }
-    startTransition(() => {
-      formAction(fd);
-    });
-  }
-
-  function handleOpenChange(next: boolean) {
-    if (!next) {
-      reset(DEFAULT_VALUES);
-    }
-    onOpenChange(next);
-  }
-
-  if (!hydrated) return null;
-
-  const fieldsProps = {
-    form,
-    onCancel: () => handleOpenChange(false),
-    onSubmit: onValidSubmit,
-    formId: "anticipos-create-form",
-  };
-
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="shrink-0 gap-1 border-b border-border px-5 pb-4 pt-5">
-            <DialogTitle>Nuevo registro</DialogTitle>
-            <DialogDescription>
-              Captura la información del anticipo. La fecha de gestión puede
-              quedar en blanco y asignarse al legalizarlo.
-            </DialogDescription>
-          </DialogHeader>
-          <AnticiposFormFields {...fieldsProps} />
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  return (
-    <Drawer open={open} onOpenChange={handleOpenChange}>
-      <DrawerContent className="overflow-hidden">
-        <DrawerHeader className="shrink-0 border-b border-border">
-          <DrawerTitle>Nuevo registro</DrawerTitle>
-          <DrawerDescription>
-            Captura la información del anticipo. La fecha de gestión puede
-            quedar en blanco y asignarse al legalizarlo.
-          </DrawerDescription>
-        </DrawerHeader>
-        <AnticiposFormFields {...fieldsProps} />
-      </DrawerContent>
-    </Drawer>
-  );
-}
 
 export { AnticiposFormFields, DEFAULT_VALUES as ANTICIPOS_DEFAULT_VALUES };

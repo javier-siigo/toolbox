@@ -51,7 +51,7 @@ import {
 } from "@/lib/servicios-publicos/schema";
 import { cn } from "@/lib/utils";
 
-import { AlertaIndicador, ETIQUETA, EstadoBadge, FiltroSelect, SectionLabel, TODOS } from "./bits";
+import { AlertaIndicador, ETIQUETA, EstadoBadge, FiltroSelect, Indicador, SectionLabel, TODOS } from "./bits";
 import { PasoDialog, type Paso } from "./paso-dialog";
 import { ReciboDetalle } from "./recibo-detalle";
 import { ReciboFormDialog, type ModoFormulario } from "./recibo-form-dialog";
@@ -538,55 +538,6 @@ function ErrorCarga({ detalle }: { detalle: string }) {
         </Button>
       </EmptyContent>
     </Empty>
-  );
-}
-
-type Tono = "default" | "warning" | "destructive" | "muted";
-
-const TONO_INDICADOR: Record<Tono, string> = {
-  default: "bg-primary/10 text-primary border-primary/15 dark:bg-primary/15 dark:text-primary-foreground/90 dark:border-primary/30",
-  warning: "bg-amber-100 text-amber-700 border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/40",
-  destructive: "bg-rose-100 text-rose-700 border-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/40",
-  muted: "bg-muted text-muted-foreground border-border",
-};
-
-/** Mismo diseño que el KPI tile de anticipos, pero como botón: filtra la tabla. */
-function Indicador({
-  icon,
-  label,
-  value,
-  tone,
-  detalle,
-  activo,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  tone: Tono;
-  detalle: string;
-  activo: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={activo}
-      className={cn(
-        "flex items-center gap-3 rounded-lg border bg-card p-4 text-left shadow-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        activo ? "border-primary ring-1 ring-primary/30" : "border-border",
-      )}
-    >
-      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-md border", TONO_INDICADOR[tone])} aria-hidden>
-        {icon}
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={cn(ETIQUETA, "truncate py-px")}>{label}</span>
-        <span className="font-mono text-xl font-semibold tabular-nums text-foreground">{value}</span>
-        <span className="truncate text-xs text-muted-foreground">{detalle}</span>
-      </span>
-    </button>
   );
 }
 
