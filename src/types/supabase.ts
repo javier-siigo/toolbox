@@ -190,6 +190,7 @@ export type Database = {
         | "autorizacion_soportes"
         | "revisar_con_harold"
         | "soportes"
+        | "registrar"
       observacion_1:
         | "no_se_ha_contactado"
         | "escrito_1_vez"
@@ -1064,6 +1065,7 @@ export const Constants = {
         "autorizacion_soportes",
         "revisar_con_harold",
         "soportes",
+        "registrar",
       ],
       observacion_1: [
         "no_se_ha_contactado",
