@@ -14,6 +14,7 @@ import {
 import {
   BadgeCheck,
   Columns3,
+  Download,
   Filter,
   FilterX,
   Inbox,
@@ -83,6 +84,7 @@ import { columns } from "./columns";
 import { features } from "./data-table-features";
 import type { DataTableFeatures } from "./data-table-features";
 import { legalizeAnticipo } from "@/lib/anticipos/actions";
+import { descargarAnticiposExcel } from "@/lib/anticipos/export-excel";
 
 interface AnticiposDataTableProps {
   rows: AnticipoRow[];
@@ -441,6 +443,30 @@ export function AnticiposDataTable({
     setOnlyRetirados(false);
   };
 
+  const [isExporting, startExportTransition] = useTransition();
+
+  function handleExport() {
+    // Filas filtradas y en el orden de la tabla, sin paginar.
+    const exportRows = table.getPrePaginatedRowModel().rows.map((r) => r.original);
+    startExportTransition(async () => {
+      try {
+        await descargarAnticiposExcel({
+          rows: exportRows,
+          totalRegistros: totalRows,
+          filtros: {
+            busqueda: globalFilter,
+            falta: faltaFilter,
+            observacion1: observacion1Filter,
+            soloRetirados: onlyRetirados,
+          },
+        });
+      } catch (err) {
+        console.error("[anticipos] exportar excel", err);
+        toast.error("No se pudo generar el Excel. Intenta de nuevo.");
+      }
+    });
+  }
+
   const faltaActive = faltaFilter !== "";
   const observacionActive = observacion1Filter !== "";
 
@@ -546,6 +572,23 @@ export function AnticiposDataTable({
               })}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={isExporting || totalFiltered === 0}
+          data-tour="exportar"
+          className="h-9 gap-1.5 text-xs"
+        >
+          {isExporting ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
+          {isExporting ? "Generando…" : "Descargar Excel"}
+        </Button>
 
         {hasFilters && (
           <div className="ml-auto flex items-center gap-3">

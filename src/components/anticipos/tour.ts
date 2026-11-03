@@ -42,6 +42,13 @@ export const TOUR_ANTICIPOS: TourStep[] = [
     side: "bottom",
   },
   {
+    target: "exportar",
+    title: "Descarga el reporte",
+    description:
+      "Genera un Excel con un resumen de indicadores y el detalle de los registros. Respeta la búsqueda, los filtros y el orden que tengas en la tabla.",
+    side: "bottom",
+  },
+  {
     target: "fila",
     title: "3. Actualiza el seguimiento",
     description:
