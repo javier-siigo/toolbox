@@ -162,6 +162,15 @@ export function ServiciosPublicosPageClient({
 
   const filas = useMemo(() => {
     const q = filtros.q.trim().toLowerCase();
+    // Si la búsqueda es solo un número (con o sin guiones/espacios), se compara contra los dígitos
+    // de cada referencia, ignorando prefijos como "BTA" o "BEC-" y separadores.
+    const qDigitos = /^[\d\s.\-]+$/.test(q) ? q.replace(/\D/g, "") : "";
+    const refServicio = new Map(servicios.map((s) => [s.id, s.referencia]));
+    const coincide = (r: (typeof recibos)[number]) => {
+      const refs = [r.referencia, refServicio.get(r.servicio_id)].filter((x): x is string => Boolean(x));
+      if (`${r.proveedor} ${r.servicio} ${refs.join(" ")}`.toLowerCase().includes(q)) return true;
+      return qDigitos !== "" && refs.some((ref) => ref.replace(/\D/g, "").includes(qDigitos));
+    };
     return recibos
       .filter((r) => {
         if (filtros.mes !== TODOS && r.mes !== filtros.mes) return false;
@@ -170,7 +179,7 @@ export function ServiciosPublicosPageClient({
         if (filtros.semaforo !== TODOS && alertas.get(r.id)?.nivel !== filtros.semaforo) return false;
         if (filtros.pago === "pagado" && r.estado !== "pagado") return false;
         if (filtros.pago === "sin_pagar" && r.estado === "pagado") return false;
-        if (q && !`${r.proveedor} ${r.servicio} ${r.referencia ?? ""}`.toLowerCase().includes(q)) return false;
+        if (q && !coincide(r)) return false;
         return true;
       })
       .sort(
@@ -180,7 +189,7 @@ export function ServiciosPublicosPageClient({
           a.proveedor.localeCompare(b.proveedor) ||
           a.servicio.localeCompare(b.servicio),
       );
-  }, [recibos, filtros, alertas]);
+  }, [recibos, servicios, filtros, alertas]);
 
   const hayFiltros =
     filtros.proveedor !== TODOS ||
