@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ConciliacionError, cleanupStorage, conciliarColombia } from "@/lib/conciliaciones/conciliar";
 import { getBancoPorSlug } from "@/lib/conciliaciones/bancos";
+import { hoyEnPais, periodoVigente } from "@/lib/conciliaciones/periodo";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
 import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
 import { PREVIO_INVALID_TYPE_MESSAGE, contentDispositionAdjunto, isXlsxFilename } from "@/lib/uploads";
@@ -93,6 +94,11 @@ export async function POST(request: Request) {
       pais,
       banco,
       bancoNombre: bancoNombre as string,
+      // El periodo se resuelve aquí (no lo manda el navegador) con la fecha del país.
+      periodo: periodoVigente(
+        { periodo: bancoRow.periodo, cierre: bancoRow.periodoCierre },
+        hoyEnPais(pais),
+      ),
       principal: {
         storagePath: principalPath,
         originalName: originalNamePrincipal as string,
@@ -118,6 +124,9 @@ export async function POST(request: Request) {
     }
     if (result.registrosExistentes !== null) {
       headers.set("X-Registros-Existentes", String(result.registrosExistentes));
+    }
+    if (result.registrosFueraPeriodo !== null) {
+      headers.set("X-Registros-Fuera-Periodo", String(result.registrosFueraPeriodo));
     }
     return new Response(arrayBuffer, { status: 200, headers });
   } catch (err) {

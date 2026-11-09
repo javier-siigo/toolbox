@@ -18,6 +18,7 @@ export interface ResumenTxt {
   alertas?: number;
   errores?: number;
   duplicadosOmitidos?: number;
+  fueraPeriodo?: number;
 }
 
 export interface TxtConversion {
@@ -235,6 +236,14 @@ function ResumenBreve({ resumen }: { resumen?: ResumenTxt }) {
           {" · "}
           <span className="tabular-nums">
             {resumen.duplicadosOmitidos} duplicados omitidos
+          </span>
+        </>
+      )}
+      {resumen.fueraPeriodo !== undefined && resumen.fueraPeriodo > 0 && (
+        <>
+          {" · "}
+          <span className="tabular-nums">
+            {resumen.fueraPeriodo} fuera del periodo omitidos
           </span>
         </>
       )}

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { BankCombobox } from "./bank-combobox";
 import { DualUploadCard } from "./dual-upload-card";
+import { PeriodoBanco } from "./periodo-banco";
 import { tourConciliaciones } from "./tour";
 import { TxtConvertRow, type TxtConversion } from "./txt-convert-row";
 import { ComoUsar } from "@/components/tour/como-usar";
@@ -233,6 +234,7 @@ export function ConciliacionesPageClient({
             alertas: num("x-alertas"),
             errores: num("x-errores"),
             duplicadosOmitidos: num("x-duplicados-omitidos"),
+            fueraPeriodo: num("x-registros-fuera-periodo"),
           },
           archivosConError: parseArchivosConError(res.headers.get("x-archivos-error")),
         });
@@ -440,6 +442,9 @@ export function ConciliacionesPageClient({
         const registrosExistentes = parseCountHeader(
           conciliarRes.headers.get("x-registros-existentes"),
         );
+        const registrosFueraPeriodo = parseCountHeader(
+          conciliarRes.headers.get("x-registros-fuera-periodo"),
+        );
 
         const decodedFilename = (() => {
           try {
@@ -461,6 +466,7 @@ export function ConciliacionesPageClient({
           resultSize: blob.size,
           registrosNuevos,
           registrosExistentes,
+          registrosFueraPeriodo,
           finishedAt: Date.now(),
         };
         setCurrentRun(done);
@@ -558,16 +564,46 @@ export function ConciliacionesPageClient({
             El banco determina el flujo de n8n que se ejecuta.
           </p>
         </header>
-        <div className="flex flex-col gap-2">
-          <BankCombobox
-            bancos={bancos}
-            value={banco}
-            onChange={(b) => {
-              handleClearBanco();
-              setBanco(b);
-            }}
-            disabled={isBusy}
-          />
+        <div className="@container flex flex-col gap-2">
+          <div className="flex flex-col gap-4 @[61rem]:flex-row @[61rem]:items-end @[61rem]:gap-6">
+            <div className="flex shrink-0 flex-col gap-1.5">
+              <span
+                id="banco-label"
+                className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Banco
+              </span>
+              <BankCombobox
+                bancos={bancos}
+                value={banco}
+                onChange={(b) => {
+                  handleClearBanco();
+                  setBanco(b);
+                }}
+                disabled={isBusy}
+              />
+            </div>
+            <div className="flex min-w-0 flex-1 border-t border-border pt-4 @[61rem]:border-t-0 @[61rem]:border-l @[61rem]:pt-0 @[61rem]:pl-6">
+              {banco ? (
+                <PeriodoBanco
+                  key={banco.slug}
+                  pais={pais}
+                  banco={banco}
+                  editable={!soloLectura}
+                  disabled={isBusy || isConvertingTxt}
+                  onSaved={(periodo, periodoCierre) =>
+                    setBanco((b) =>
+                      b && b.slug === banco.slug ? { ...b, periodo, periodoCierre } : b,
+                    )
+                  }
+                />
+              ) : (
+                <p className="flex min-h-9 items-center self-end text-sm text-muted-foreground">
+                  Elige un banco para ver qué mes se está conciliando.
+                </p>
+              )}
+            </div>
+          </div>
           {banco?.descripcion && (
             <p className="text-xs text-muted-foreground">{banco.descripcion}</p>
           )}
@@ -621,6 +657,15 @@ export function ConciliacionesPageClient({
               <span className="font-medium tabular-nums text-foreground">
                 {currentRun.registrosExistentes ?? "—"}
               </span>
+              {currentRun.registrosFueraPeriodo !== undefined && (
+                <>
+                  {" · "}
+                  Fuera del periodo (omitidos):{" "}
+                  <span className="font-medium tabular-nums text-foreground">
+                    {currentRun.registrosFueraPeriodo}
+                  </span>
+                </>
+              )}
             </p>
           )}
         {soloLectura && (

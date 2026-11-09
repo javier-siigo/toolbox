@@ -2,6 +2,8 @@ import "server-only";
 
 import { serverEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { PeriodoVigente } from "./periodo";
+import { appendPeriodo } from "./periodo";
 import { ACCEPTED_EXTENSIONS, ACCEPTED_MIME_PREFIXES, MAX_FILE_SIZE_BYTES } from "@/lib/uploads";
 
 export const BUCKET = "conciliaciones-uploads";
@@ -36,6 +38,8 @@ export interface ConciliacionResult {
   contentType: string;
   registrosNuevos: number | null;
   registrosExistentes: number | null;
+  /** Registros descartados por tener fecha fuera del periodo (si n8n lo informa). */
+  registrosFueraPeriodo: number | null;
 }
 
 export interface InputFile {
@@ -140,6 +144,7 @@ export interface ConciliarArgs {
   pais: string;
   banco: string;
   bancoNombre: string;
+  periodo: PeriodoVigente;
   principal: InputFile;
   previo?: InputFile;
 }
@@ -166,6 +171,7 @@ export async function conciliarColombia(args: ConciliarArgs): Promise<Conciliaci
   formData.append("pais", args.pais);
   formData.append("banco", args.banco);
   formData.append("bancoNombre", args.bancoNombre);
+  appendPeriodo(formData, args.periodo);
   formData.append("file", principalFile.file, principalFile.file.name);
   if (previoFile) {
     formData.append("previous", previoFile.file, previoFile.file.name);
@@ -213,6 +219,7 @@ export async function conciliarColombia(args: ConciliarArgs): Promise<Conciliaci
         FALLBACK_CONTENT_TYPE,
       registrosNuevos: parseCount(response.headers.get("x-registros-nuevos")),
       registrosExistentes: parseCount(response.headers.get("x-registros-existentes")),
+      registrosFueraPeriodo: parseCount(response.headers.get("x-registros-fuera-periodo")),
     };
   } catch (err) {
     if (err instanceof ConciliacionError) throw err;

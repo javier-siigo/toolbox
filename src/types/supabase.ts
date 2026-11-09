@@ -439,6 +439,10 @@ export type Database = {
           nombre: string
           orden: number
           pais: string
+          periodo: string | null
+          periodo_actualizado_en: string | null
+          periodo_actualizado_por: string | null
+          periodo_cierre: string | null
           slug: string
           updated_at: string
           webhook_url: string
@@ -452,6 +456,10 @@ export type Database = {
           nombre: string
           orden?: number
           pais: string
+          periodo?: string | null
+          periodo_actualizado_en?: string | null
+          periodo_actualizado_por?: string | null
+          periodo_cierre?: string | null
           slug: string
           updated_at?: string
           webhook_url: string
@@ -465,6 +473,10 @@ export type Database = {
           nombre?: string
           orden?: number
           pais?: string
+          periodo?: string | null
+          periodo_actualizado_en?: string | null
+          periodo_actualizado_por?: string | null
+          periodo_cierre?: string | null
           slug?: string
           updated_at?: string
           webhook_url?: string

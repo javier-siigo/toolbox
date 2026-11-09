@@ -20,7 +20,7 @@ Un proceso por país (`conciliaciones.colombia`, `conciliaciones.mexico`…). La
 
 ## Flujo del usuario
 
-1. Elige el **banco** (combobox; lista desde BD, solo bancos activos del país). Cambiar de banco limpia el resultado.
+1. Elige el **banco** (combobox; lista desde BD, solo bancos activos del país). Cambiar de banco limpia el resultado. Debajo aparece el **periodo vigente** del banco ("Conciliando noviembre 2026 hasta el 3 de diciembre") y, con nivel `usar`, el botón **Cambiar periodo** (ver [Periodo por banco](#periodo-por-banco)).
 2. Sube el **Extracto bancario** (obligatorio) y, si la tiene, la **Conciliación anterior (Excel de contadores)** (opcional). El extracto acepta `.xlsx`, `.xls`, `.csv`; la conciliación anterior solo `.xlsx` (se valida al elegirla y antes de enviar). Máx. 10 MB c/u.
 3. Pulsa **Procesar conciliación**. Se ve el estado "Procesando…".
 4. Al terminar, aparece **Descargar** con el Excel resultante. Se puede cancelar quitando el archivo o el banco (aborta las peticiones en curso).
@@ -84,10 +84,14 @@ Archivos: `src/app/api/conciliaciones/conciliar/route.ts`, `src/lib/conciliacion
 | `pais` | texto | `CO`, `UY`, `EC`… |
 | `banco` | texto | slug del banco (`conciliacion_bancos.slug`) |
 | `bancoNombre` | texto | nombre visible |
+| `periodo` | texto | mes que se concilia, `YYYY-MM` |
+| `periodoDesde` | texto | primer día del mes, `YYYY-MM-DD` |
+| `periodoHasta` | texto | último día del mes, `YYYY-MM-DD` |
+| `periodoCierre` | texto | fecha de cierre configurada, `YYYY-MM-DD` (solo si hay una vigente) |
 | `file` | archivo | extracto bancario (obligatorio) |
 | `previous` | archivo | conciliación anterior de los contadores, `.xlsx` (opcional; solo si se subió) |
 
-**Response esperada:** archivo binario (por defecto Excel `.xlsx`), con headers opcionales `X-Registros-Nuevos` y `X-Registros-Existentes` (enteros). Cualquier estado no 2xx, respuesta vacía, timeout o fallo de red se traduce a error.
+**Response esperada:** archivo binario (por defecto Excel `.xlsx`), con headers opcionales `X-Registros-Nuevos`, `X-Registros-Existentes` y `X-Registros-Fuera-Periodo` (enteros; el último son los registros descartados por fecha). Cualquier estado no 2xx, respuesta vacía, timeout o fallo de red se traduce a error.
 
 > Todos los bancos apuntan al mismo webhook (`/webhook/reconciliation`). **n8n elige el adapter del banco según el campo `banco` (slug)**, por configuración en n8n; la lógica de conciliación vive allí, no en este repo. Un banco nuevo solo necesita su fila en `conciliaciones.bancos` con un slug que coincida con su adapter.
 
@@ -112,6 +116,19 @@ Lectura de la lista (`getBancosPorPais`): cliente admin, solo activos, ordenados
 ### Cómo agregar o cambiar un banco
 
 Insertar o editar una fila en `conciliaciones.bancos` (`pais`, `slug`, `nombre`, `webhook_url`, `activo = true`, `orden`). No requiere despliegue; aparece en la UI en ≤ 60 s por la caché. Para desactivarlo: `activo = false`.
+
+## Periodo por banco
+
+Los contadores definen en el portal, **por banco**, el mes que concilian y hasta qué día se sigue trabajando ese mes por el cierre (p. ej. noviembre hasta el 3 de diciembre). Solo cuentan los registros con fecha dentro del mes del periodo; los de otros meses (p. ej. octubre en un extracto de noviembre) se descartan **en n8n**.
+
+- **Dónde se configura:** sección "Banco a conciliar" → **Cambiar periodo** (nivel `usar` del país). Server action `guardarPeriodoBanco` (`src/lib/conciliaciones/actions.ts`); escribe con el cliente admin e invalida la caché `conciliacion-bancos`.
+- **Datos:** columnas `periodo` (primer día del mes), `periodo_cierre`, `periodo_actualizado_por`, `periodo_actualizado_en` en `conciliaciones.bancos` (migración `20261109140000_conciliaciones_periodo_banco.sql`). El cierre no puede ser antes del último día del mes.
+- **Regla** (`src/lib/conciliaciones/periodo.ts`, con la fecha de hoy en la zona horaria del país):
+  - hoy ≤ `periodo_cierre` → se concilia el mes configurado.
+  - pasado el cierre o sin configurar → se concilia el **mes en curso**.
+- **n8n:** el servidor (no el navegador) calcula el periodo y lo envía como `periodo`, `periodoDesde`, `periodoHasta` y `periodoCierre` a `/webhook/reconciliation` y a los webhooks de unificación (`banorte-txt-a-excel`, `unificar-extractos`). Cada flujo debe filtrar las filas del extracto con `periodoDesde ≤ fecha ≤ periodoHasta` antes de conciliar y, si quiere, informar las descartadas en `X-Registros-Fuera-Periodo`. La conciliación anterior (`previous`) no se filtra: trae los pendientes de meses previos.
+  - En el orquestador `Reconciliation (Webhook)`: **Classify Files** fuerza `overrides.netsuite.desde/hasta` al mes del periodo, así todos los adapters consultan NetSuite solo en ese mes (hasta fin de mes cuando ya pasó; si el mes sigue en curso, cada adapter usa su tope por defecto). **Aplicar periodo** descarta además cualquier registro de NetSuite con fecha contable fuera del mes, aunque cruce por llave: en *Fecha Contable* solo aparecen registros del mes conciliado.
+  - Excel: la columna **G = Cuenta** (cuenta contable del banco en NetSuite) va antes de *ID Interno*. Un archivo anterior con el layout viejo (G = ID Interno) se sigue actualizando con su layout, sin la columna.
 
 ## Particularidades por banco
 

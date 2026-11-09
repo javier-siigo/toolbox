@@ -3,6 +3,7 @@ import "server-only";
 import { serverEnv } from "@/lib/env";
 
 import { ConciliacionError } from "./conciliar";
+import { appendPeriodo, type PeriodoVigente } from "./periodo";
 import {
   parseArchivosConError,
   type ArchivoTxtConError,
@@ -40,6 +41,7 @@ const RESUMEN_NUMERICO = [
   "x-alertas",
   "x-errores",
   "x-duplicados-omitidos",
+  "x-registros-fuera-periodo",
 ] as const;
 // `[{archivo, error}]` serializado con encodeURIComponent.
 const ARCHIVOS_ERROR_HEADER = "x-archivos-error";
@@ -85,6 +87,7 @@ export async function convertirTxt(args: {
   webhookUrl: string;
   pais: string;
   banco: string;
+  periodo: PeriodoVigente;
   files: File[];
 }): Promise<ConversionTxtResult> {
   const env = serverEnv();
@@ -92,6 +95,7 @@ export async function convertirTxt(args: {
   const formData = new FormData();
   formData.append("pais", args.pais);
   formData.append("banco", args.banco);
+  appendPeriodo(formData, args.periodo);
   args.files.forEach((file, i) => {
     formData.append(`file_${i}`, file, file.name);
   });

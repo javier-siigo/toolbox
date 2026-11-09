@@ -5,6 +5,8 @@ export interface BancoConciliacion {
   nombre: string;
   descripcion: string | null;
   esParticular: boolean;
+  periodo: string | null;
+  periodoCierre: string | null;
 }
 
 export type ConciliacionRunStatus =
@@ -31,5 +33,6 @@ export interface ConciliacionRun {
   resultContentType?: string;
   registrosNuevos?: number;
   registrosExistentes?: number;
+  registrosFueraPeriodo?: number;
   error?: string;
 }

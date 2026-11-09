@@ -14,6 +14,8 @@ import {
   getConversion,
   mensajeFormatoInvalido,
 } from "@/lib/conciliaciones/particularidades";
+import { getBancoPorSlug } from "@/lib/conciliaciones/bancos";
+import { hoyEnPais, periodoVigente } from "@/lib/conciliaciones/periodo";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
 import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
 
@@ -81,8 +83,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const bancoRow = await getBancoPorSlug(pais, banco);
+  if (!bancoRow) {
+    return jsonError("El banco seleccionado no está disponible.", "upstream_config", 400);
+  }
+  const periodo = periodoVigente(
+    { periodo: bancoRow.periodo, cierre: bancoRow.periodoCierre },
+    hoyEnPais(pais),
+  );
+
   try {
-    const result = await convertirTxt({ webhookUrl, pais, banco, files });
+    const result = await convertirTxt({ webhookUrl, pais, banco, periodo, files });
     const arrayBuffer = await result.blob.arrayBuffer();
     const headers = new Headers(result.resumen);
     headers.set("Content-Type", result.contentType);

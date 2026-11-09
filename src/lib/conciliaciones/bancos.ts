@@ -10,6 +10,10 @@ export interface BancoConciliacion {
   nombre: string;
   descripcion: string | null;
   esParticular: boolean;
+  /** Mes configurado por los contadores (`YYYY-MM-01`) o null. */
+  periodo: string | null;
+  /** Fecha hasta la que se sigue conciliando `periodo` o null. */
+  periodoCierre: string | null;
 }
 
 export interface BancoConciliacionCompleto extends BancoConciliacion {
@@ -23,7 +27,9 @@ function mapBanco(
   const nombre = row.nombre as string;
   const descripcion = (row.descripcion as string | null) ?? null;
   const esParticular = Boolean(row.es_particular);
-  const base = { slug, nombre, descripcion, esParticular };
+  const periodo = (row.periodo as string | null) ?? null;
+  const periodoCierre = (row.periodo_cierre as string | null) ?? null;
+  const base = { slug, nombre, descripcion, esParticular, periodo, periodoCierre };
   if ("webhook_url" in row) {
     return { ...base, webhookUrl: row.webhook_url as string };
   }
@@ -38,7 +44,7 @@ export async function getBancosPorPais(
       const admin = createAdminClient();
       const { data, error } = await admin
         .schema("conciliaciones").from("bancos")
-        .select("slug, nombre, descripcion, es_particular")
+        .select("slug, nombre, descripcion, es_particular, periodo, periodo_cierre")
         .eq("pais", pais)
         .eq("activo", true)
         .order("orden", { ascending: true })
@@ -59,7 +65,7 @@ export async function getBancoPorSlug(
   const supabase = await createClient();
   const { data, error } = await supabase
     .schema("conciliaciones").from("bancos")
-    .select("slug, nombre, descripcion, es_particular, webhook_url, activo")
+    .select("slug, nombre, descripcion, es_particular, periodo, periodo_cierre, webhook_url, activo")
     .eq("pais", pais)
     .eq("slug", slug)
     .maybeSingle();
