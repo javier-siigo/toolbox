@@ -3,7 +3,11 @@ import "server-only";
 import { serverEnv } from "@/lib/env";
 
 import { ConciliacionError } from "./conciliar";
-import { parseArchivosConError, type ArchivoTxtConError } from "./particularidades";
+import {
+  parseArchivosConError,
+  type ArchivoTxtConError,
+  type FormatoConversion,
+} from "./particularidades";
 
 const WEBHOOKS_TXT: Record<string, string> = {
   "MX:bananorte-mexico": "https://juansiigo.app.n8n.cloud/webhook/banorte-txt-a-excel",
@@ -13,8 +17,19 @@ const REQUEST_TIMEOUT_MS = 120_000;
 const XLSX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-export function getWebhookTxt(pais: string, banco: string): string | null {
-  return WEBHOOKS_TXT[`${pais}:${banco}`] ?? null;
+// Resto de bancos del país: unifica varios reportes diarios en Excel.
+const WEBHOOKS_UNIFICAR_EXCEL: Record<string, string> = {
+  MX: "https://juansiigo.app.n8n.cloud/webhook/unificar-extractos",
+};
+
+export function getWebhookConversion(
+  pais: string,
+  banco: string,
+  formato: FormatoConversion,
+): string | null {
+  return formato === "txt"
+    ? (WEBHOOKS_TXT[`${pais}:${banco}`] ?? null)
+    : (WEBHOOKS_UNIFICAR_EXCEL[pais] ?? null);
 }
 
 // Métricas numéricas que n8n envía en headers junto al Excel consolidado.
@@ -140,7 +155,7 @@ export async function convertirTxt(args: {
     if (err instanceof ConciliacionError) throw err;
     if ((err as Error).name === "AbortError") {
       throw new ConversionTxtError(
-        "Tiempo de espera agotado al convertir los TXT",
+        "Tiempo de espera agotado al convertir los archivos",
         "upstream_timeout",
         504,
       );

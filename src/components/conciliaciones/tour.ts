@@ -3,19 +3,30 @@ import type { TourStep } from "@/components/tour/como-usar";
 /** Recorrido "¿Cómo usar?" de la conciliación bancaria de un país. */
 export function tourConciliaciones(
   pais: string,
-  opts: { conTxt?: boolean } = {},
+  opts: { conversion?: "txt" | "excel" } = {},
 ): TourStep[] {
-  const pasoTxt: TourStep[] = opts.conTxt
-    ? [
-        {
-          target: "txt",
-          title: "Extracto en TXT (opcional)",
-          description:
-            "Si el banco te entregó el extracto en uno o varios .txt, selecciónalos juntos. Se consolidan en un solo Excel que queda cargado como extracto bancario; también puedes descargarlo. Si algún TXT no se pudo leer, aparece listado debajo.",
-          side: "bottom",
-        },
-      ]
-    : [];
+  const pasoTxt: TourStep[] =
+    opts.conversion === "txt"
+      ? [
+          {
+            target: "txt",
+            title: "Extracto en TXT (opcional)",
+            description:
+              "Si el banco te entregó el extracto en uno o varios .txt, selecciónalos juntos. Se consolidan en un solo Excel que queda cargado como extracto bancario; también puedes descargarlo. Si algún TXT no se pudo leer, aparece listado debajo.",
+            side: "bottom",
+          },
+        ]
+      : opts.conversion === "excel"
+        ? [
+            {
+              target: "txt",
+              title: "Varios reportes diarios (opcional)",
+              description:
+                "Si tienes varios días acumulados, selecciona todos los Excel juntos. Se unifican en un solo Excel que queda cargado como extracto bancario, así haces una sola conciliación; también puedes descargarlo. Si algún archivo no se pudo leer, aparece listado debajo.",
+              side: "bottom",
+            },
+          ]
+        : [];
   return [
     {
       title: `Conciliación ${pais}`,

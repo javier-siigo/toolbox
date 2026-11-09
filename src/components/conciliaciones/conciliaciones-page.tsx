@@ -12,13 +12,15 @@ import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
 import { SoloLectura } from "@/components/common/solo-lectura";
 import {
+  FORMATO_LABEL,
   MAX_TXT_FILES,
   MAX_TXT_TOTAL_BYTES,
   MAX_TXT_TOTAL_LABEL,
-  getConversionTxt,
-  isTxtFilename,
+  esArchivoDeFormato,
+  getConversion,
+  mensajeFormatoInvalido,
   parseArchivosConError,
-  requiereConversionTxt,
+  requiereConversion,
   type ArchivoTxtConError,
 } from "@/lib/conciliaciones/particularidades";
 import { PREVIO_INVALID_TYPE_MESSAGE, isXlsxFilename } from "@/lib/uploads";
@@ -178,8 +180,9 @@ export function ConciliacionesPageClient({
 
   const convertTxt = React.useCallback(
     async (bancoSel: BancoConciliacion, files: File[]) => {
-      const config = getConversionTxt(pais, bancoSel.slug);
+      const config = getConversion(pais, bancoSel.slug);
       if (!config) return;
+      const etiqueta = FORMATO_LABEL[config.formato];
       const controller = new AbortController();
       txtAbortRef.current?.abort();
       txtAbortRef.current = controller;
@@ -187,7 +190,7 @@ export function ConciliacionesPageClient({
 
       const failTxt = (message: string, archivosConError: ArchivoTxtConError[] = []) => {
         setTxtConversion({ status: "error", error: message, archivosConError });
-        toast.error(`Paso 1 (conversión de TXT): ${message}`);
+        toast.error(`Paso 1 (unificación de ${etiqueta}): ${message}`);
       };
 
       try {
@@ -206,7 +209,7 @@ export function ConciliacionesPageClient({
             | { error?: string; code?: string; archivosConError?: unknown }
             | null;
           failTxt(
-            payload?.error ?? "No se pudieron convertir los TXT. Intenta de nuevo.",
+            payload?.error ?? `No se pudieron unificar los archivos ${etiqueta}. Intenta de nuevo.`,
             parseArchivosConError(payload?.archivosConError),
           );
           return;
@@ -238,7 +241,7 @@ export function ConciliacionesPageClient({
         setCurrentRun((prev) =>
           prev && (prev.status === "done" || prev.status === "error") ? null : prev,
         );
-        toast.success("Paso 1 listo: TXT convertidos y cargados como extracto");
+        toast.success(`Paso 1 listo: ${etiqueta} unificados y cargados como extracto`);
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         failTxt((err as Error).message || "No se pudo contactar el servicio de conversión.");
@@ -252,23 +255,27 @@ export function ConciliacionesPageClient({
   const handleSelectTxt = React.useCallback(
     (files: File[]) => {
       if (!banco) return;
-      const noTxt = files.find((f) => !isTxtFilename(f.name));
-      if (noTxt) {
-        toast.error(`${noTxt.name} no es un archivo .txt.`);
+      const config = getConversion(pais, banco.slug);
+      if (!config) return;
+      const invalido = files.find((f) => !esArchivoDeFormato(f.name, config.formato));
+      if (invalido) {
+        toast.error(mensajeFormatoInvalido(invalido.name, config.formato));
         return;
       }
       if (files.length > MAX_TXT_FILES) {
-        toast.error(`Puedes subir hasta ${MAX_TXT_FILES} archivos TXT a la vez.`);
+        toast.error(
+          `Puedes subir hasta ${MAX_TXT_FILES} archivos ${FORMATO_LABEL[config.formato]} a la vez.`,
+        );
         return;
       }
       if (files.reduce((sum, f) => sum + f.size, 0) > MAX_TXT_TOTAL_BYTES) {
-        toast.error(`Los TXT superan el límite de ${MAX_TXT_TOTAL_LABEL} en total.`);
+        toast.error(`Los archivos superan el límite de ${MAX_TXT_TOTAL_LABEL} en total.`);
         return;
       }
       setTxtFiles(files);
       void convertTxt(banco, files);
     },
-    [banco, convertTxt],
+    [banco, pais, convertTxt],
   );
 
   const handleRetryTxt = React.useCallback(() => {
@@ -360,8 +367,8 @@ export function ConciliacionesPageClient({
       abortRef.current = controller;
       const { signal } = controller;
 
-      // Con conversión de TXT la conciliación es el paso 2 de 2.
-      const pasoLabel = requiereConversionTxt(pais, bancoSel.slug)
+      // Con unificación de archivos la conciliación es el paso 2 de 2.
+      const pasoLabel = requiereConversion(pais, bancoSel.slug)
         ? "Paso 2 (conciliación): "
         : "";
 
@@ -500,7 +507,8 @@ export function ConciliacionesPageClient({
     currentRun?.status === "uploading" || currentRun?.status === "processing";
   const isConvertingTxt = txtConversion.status === "processing";
   const canSubmit = !soloLectura && !!banco && !!principalFile && !isBusy && !isConvertingTxt;
-  const conTxt = !!banco && requiereConversionTxt(pais, banco.slug);
+  const conversion = banco ? getConversion(pais, banco.slug) : null;
+  const conTxt = conversion !== null;
 
   const idleFileStatus: ConciliacionRunStatus = "idle";
   const principalStatus: ConciliacionRunStatus =
@@ -514,8 +522,8 @@ export function ConciliacionesPageClient({
       : (currentRun?.status ?? idleFileStatus);
 
   const tour = React.useMemo(
-    () => tourConciliaciones(PAIS_LABEL[pais], { conTxt }),
-    [pais, conTxt],
+    () => tourConciliaciones(PAIS_LABEL[pais], { conversion: conversion?.formato }),
+    [pais, conversion?.formato],
   );
 
   return (
@@ -577,8 +585,9 @@ export function ConciliacionesPageClient({
         onRemovePrevio={handleRemovePrevio}
         disabled={isBusy || isConvertingTxt}
         extra={
-          conTxt && (
+          conversion && (
             <TxtConvertRow
+              formato={conversion.formato}
               txtFiles={txtFiles}
               conversion={txtConversion}
               enUsoComoExtracto={

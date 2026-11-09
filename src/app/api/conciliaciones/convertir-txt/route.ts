@@ -3,13 +3,16 @@ import { NextResponse } from "next/server";
 import {
   ConversionTxtError,
   convertirTxt,
-  getWebhookTxt,
+  getWebhookConversion,
 } from "@/lib/conciliaciones/convertir-txt";
 import {
+  FORMATO_LABEL,
   MAX_TXT_FILES,
   MAX_TXT_TOTAL_BYTES,
   MAX_TXT_TOTAL_LABEL,
-  isTxtFilename,
+  esArchivoDeFormato,
+  getConversion,
+  mensajeFormatoInvalido,
 } from "@/lib/conciliaciones/particularidades";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
 import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
@@ -45,34 +48,36 @@ export async function POST(request: Request) {
   if (typeof banco !== "string" || banco.length === 0) {
     return jsonError("Falta el banco", "bad_request", 400);
   }
+  const config = getConversion(pais, banco);
+  const webhookUrl = config && getWebhookConversion(pais, banco, config.formato);
+  if (!config || !webhookUrl) {
+    return jsonError(
+      "Este banco no tiene unificación de archivos configurada.",
+      "upstream_config",
+      400,
+    );
+  }
+  const etiqueta = FORMATO_LABEL[config.formato];
+
   if (files.length === 0) {
-    return jsonError("Falta al menos un archivo TXT", "missing_file", 400);
+    return jsonError(`Falta al menos un archivo ${etiqueta}`, "missing_file", 400);
   }
   if (files.length > MAX_TXT_FILES) {
     return jsonError(
-      `Puedes subir hasta ${MAX_TXT_FILES} archivos TXT a la vez.`,
+      `Puedes subir hasta ${MAX_TXT_FILES} archivos ${etiqueta} a la vez.`,
       "bad_request",
       400,
     );
   }
-  const noTxt = files.find((f) => !isTxtFilename(f.name));
-  if (noTxt) {
-    return jsonError(`${noTxt.name} no es un archivo .txt.`, "invalid_type", 415);
+  const invalido = files.find((f) => !esArchivoDeFormato(f.name, config.formato));
+  if (invalido) {
+    return jsonError(mensajeFormatoInvalido(invalido.name, config.formato), "invalid_type", 415);
   }
   if (files.reduce((sum, f) => sum + f.size, 0) > MAX_TXT_TOTAL_BYTES) {
     return jsonError(
-      `Los TXT superan el límite de ${MAX_TXT_TOTAL_LABEL} en total.`,
+      `Los archivos superan el límite de ${MAX_TXT_TOTAL_LABEL} en total.`,
       "file_too_large",
       413,
-    );
-  }
-
-  const webhookUrl = getWebhookTxt(pais, banco);
-  if (!webhookUrl) {
-    return jsonError(
-      "Este banco no tiene conversión de TXT configurada.",
-      "upstream_config",
-      400,
     );
   }
 
@@ -87,7 +92,7 @@ export async function POST(request: Request) {
     if (err instanceof ConversionTxtError) {
       const message =
         err.code === "upstream_timeout"
-          ? "La conversión de los TXT tardó demasiado. Intenta de nuevo."
+          ? `La unificación de los archivos ${etiqueta} tardó demasiado. Intenta de nuevo.`
           : err.code === "upstream_empty"
             ? "El servicio devolvió un Excel vacío."
             : err.code === "upstream_status" &&
@@ -100,6 +105,6 @@ export async function POST(request: Request) {
         { status: err.status },
       );
     }
-    return jsonError("Error inesperado al convertir los TXT", "internal", 500);
+    return jsonError("Error inesperado al unificar los archivos", "internal", 500);
   }
 }

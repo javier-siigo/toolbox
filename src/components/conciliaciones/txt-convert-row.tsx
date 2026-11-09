@@ -4,7 +4,12 @@ import * as React from "react";
 import { Check, Download, FileText, Loader2, RotateCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { ArchivoTxtConError } from "@/lib/conciliaciones/particularidades";
+import {
+  FORMATO_LABEL,
+  acceptDeFormato,
+  type ArchivoTxtConError,
+  type FormatoConversion,
+} from "@/lib/conciliaciones/particularidades";
 
 export interface ResumenTxt {
   archivos?: number;
@@ -25,6 +30,7 @@ export interface TxtConversion {
 }
 
 interface TxtConvertRowProps {
+  formato: FormatoConversion;
   txtFiles: File[];
   conversion: TxtConversion;
   /** El Excel convertido sigue siendo el extracto seleccionado. */
@@ -39,12 +45,13 @@ interface TxtConvertRowProps {
 
 const MXN = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
-function txtLabel(n: number): string {
-  return n === 1 ? "1 TXT" : `${n} TXT`;
+function archivosLabel(n: number, formato: FormatoConversion): string {
+  return `${n} ${FORMATO_LABEL[formato]}`;
 }
 
-/** Paso 1 opcional y discreto: consolida uno o varios .txt del banco en un Excel. */
+/** Paso 1 opcional y discreto: consolida varios archivos del banco en un solo Excel. */
 export function TxtConvertRow({
+  formato,
   txtFiles,
   conversion,
   enUsoComoExtracto,
@@ -74,7 +81,7 @@ export function TxtConvertRow({
       className={iconButton}
       onClick={onRemove}
       disabled={disabled}
-      aria-label="Quitar TXT"
+      aria-label={`Quitar ${FORMATO_LABEL[formato]}`}
       title="Quitar"
     >
       <X className="size-3.5" aria-hidden />
@@ -89,7 +96,7 @@ export function TxtConvertRow({
       <input
         ref={inputRef}
         type="file"
-        accept=".txt,text/plain"
+        accept={acceptDeFormato(formato)}
         multiple
         className="sr-only"
         onChange={onChange}
@@ -101,14 +108,18 @@ export function TxtConvertRow({
         {conversion.status === "idle" && (
           <>
             <FileText className="size-3.5 shrink-0" aria-hidden />
-            <span>¿El extracto viene en uno o varios .txt?</span>
+            <span>
+              {formato === "txt"
+                ? "¿El extracto viene en uno o varios .txt?"
+                : "¿Tienes varios reportes diarios en Excel?"}
+            </span>
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={disabled}
               className="font-medium text-foreground underline-offset-4 hover:underline disabled:opacity-50"
             >
-              Convertir a Excel
+              {formato === "txt" ? "Convertir a Excel" : "Unificar en un Excel"}
             </button>
           </>
         )}
@@ -117,7 +128,8 @@ export function TxtConvertRow({
           <>
             <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
             <span role="status" className="min-w-0 truncate">
-              Paso 1 de 2 · Convirtiendo {txtLabel(txtFiles.length)}…
+              Paso 1 de 2 · {formato === "txt" ? "Convirtiendo" : "Unificando"}{" "}
+              {archivosLabel(txtFiles.length, formato)}…
             </span>
           </>
         )}
@@ -126,7 +138,8 @@ export function TxtConvertRow({
           <>
             <FileText className="size-3.5 shrink-0 text-destructive" aria-hidden />
             <span role="alert" className="min-w-0 text-destructive">
-              Falló el paso 1 (conversión de TXT): {conversion.error}
+              Falló el paso 1 ({formato === "txt" ? "conversión de TXT" : "unificación de Excel"}):{" "}
+              {conversion.error}
             </span>
             <div className="ml-auto flex items-center">
               <Button
@@ -150,7 +163,8 @@ export function TxtConvertRow({
           <>
             <Check className="size-3.5 shrink-0 text-primary" aria-hidden />
             <span role="status" className="min-w-0">
-              {txtLabel(conversion.resumen?.archivos ?? txtFiles.length)} convertidos
+              {archivosLabel(conversion.resumen?.archivos ?? txtFiles.length, formato)}{" "}
+              {formato === "txt" ? "convertidos" : "unificados"}
               {enUsoComoExtracto ? " y cargados como extracto" : ""}
               <ResumenBreve resumen={conversion.resumen} />
             </span>
