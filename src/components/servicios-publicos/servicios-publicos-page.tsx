@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { memo, useCallback, useDeferredValue, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -80,6 +80,9 @@ const SEMAFORO_OPCIONES = (["revisar", "atencion", "ok"] as NivelAlerta[]).map((
 
 const ESTADO_OPCIONES = ESTADOS.map((e) => ({ value: e, label: ESTADO_LABEL[e] }));
 
+/** Filas que se pintan de entrada; "Mostrar más" agrega otro bloque (igual que en anticipos). */
+const BLOQUE = 100;
+
 /** `soloLectura` (nivel `ver`): consulta y descarga soportes, sin crear ni modificar. */
 export function ServiciosPublicosPageClient({
   servicios,
@@ -112,6 +115,15 @@ export function ServiciosPublicosPageClient({
   const [preparando, startPreparar] = useTransition();
 
   const set = (cambio: Partial<Filtros>) => setFiltros((f) => ({ ...f, ...cambio }));
+
+  // Con "Todos los meses" pueden ser miles de recibos: se pinta un bloque y "Mostrar más" agrega otro.
+  // Cualquier cambio de filtros vuelve al primer bloque (ajuste de estado durante el render).
+  const [limite, setLimite] = useState(BLOQUE);
+  const [filtrosVistos, setFiltrosVistos] = useState(filtros);
+  if (filtrosVistos !== filtros) {
+    setFiltrosVistos(filtros);
+    setLimite(BLOQUE);
+  }
 
   const alertas = useMemo(() => new Map<string, Alerta>(recibos.map((r) => [r.id, alertaDe(r, hoy)])), [recibos, hoy]);
 
@@ -160,8 +172,11 @@ export function ServiciosPublicosPageClient({
     [servicios],
   );
 
+  // El input usa `filtros.q`; el filtrado usa el valor diferido para no bloquear el tecleo.
+  const qDiferida = useDeferredValue(filtros.q);
+
   const filas = useMemo(() => {
-    const q = filtros.q.trim().toLowerCase();
+    const q = qDiferida.trim().toLowerCase();
     // Si la búsqueda es solo un número (con o sin guiones/espacios), se compara contra los dígitos
     // de cada referencia, ignorando prefijos como "BTA" o "BEC-" y separadores.
     const qDigitos = /^[\d\s.\-]+$/.test(q) ? q.replace(/\D/g, "") : "";
@@ -189,7 +204,7 @@ export function ServiciosPublicosPageClient({
           a.proveedor.localeCompare(b.proveedor) ||
           a.servicio.localeCompare(b.servicio),
       );
-  }, [recibos, servicios, filtros, alertas]);
+  }, [recibos, servicios, filtros.mes, filtros.proveedor, filtros.estado, filtros.semaforo, filtros.pago, qDiferida, alertas]);
 
   const hayFiltros =
     filtros.proveedor !== TODOS ||
@@ -405,14 +420,14 @@ export function ServiciosPublicosPageClient({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filas.map((r) => (
+                    filas.slice(0, limite).map((r) => (
                       <FilaRecibo
                         key={r.id}
                         recibo={r}
                         alerta={alertas.get(r.id)!}
                         soloLectura={soloLectura}
                         conMes={filtros.mes === TODOS}
-                        onAbrir={() => setDetalleId(r.id)}
+                        onAbrir={setDetalleId}
                         onAccion={onAccion}
                       />
                     ))
@@ -420,9 +435,16 @@ export function ServiciosPublicosPageClient({
                 </TableBody>
               </Table>
             </div>
-            <div className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-              {filas.length} {filas.length === 1 ? "recibo" : "recibos"}
-              {filtros.mes !== TODOS ? ` · ${periodoLabel(filtros.mes)}` : " · todos los meses"}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+              <span>
+                {filas.length} {filas.length === 1 ? "recibo" : "recibos"}
+                {filtros.mes !== TODOS ? ` · ${periodoLabel(filtros.mes)}` : " · todos los meses"}
+              </span>
+              {filas.length > limite && (
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setLimite((l) => l + BLOQUE)}>
+                  Mostrar {Math.min(BLOQUE, filas.length - limite)} más
+                </Button>
+              )}
             </div>
           </div>
         </>
@@ -448,7 +470,8 @@ export function ServiciosPublicosPageClient({
   );
 }
 
-function FilaRecibo({
+/** Memo: abrir un diálogo o escribir en el buscador repinta la página, pero no las filas que no cambiaron. */
+const FilaRecibo = memo(function FilaRecibo({
   recibo: r,
   alerta,
   soloLectura,
@@ -461,7 +484,7 @@ function FilaRecibo({
   soloLectura: boolean;
   /** Solo con "Todos los meses": con un mes elegido la columna repetiría el mismo valor. */
   conMes: boolean;
-  onAbrir: () => void;
+  onAbrir: (id: string) => void;
   onAccion: (a: AccionRecibo) => void;
 }) {
   return (
@@ -469,9 +492,9 @@ function FilaRecibo({
       tabIndex={0}
       aria-label={`${r.proveedor} ${r.servicio}, ${periodoLabel(r.mes)}: ${alerta.motivo}`}
       className="cursor-pointer outline-none focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      onClick={onAbrir}
+      onClick={() => onAbrir(r.id)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && e.target === e.currentTarget) onAbrir();
+        if (e.key === "Enter" && e.target === e.currentTarget) onAbrir(r.id);
       }}
     >
       <TableCell className="max-w-48">
@@ -523,7 +546,7 @@ function FilaRecibo({
       )}
     </TableRow>
   );
-}
+});
 
 function ErrorCarga({ detalle }: { detalle: string }) {
   const router = useRouter();

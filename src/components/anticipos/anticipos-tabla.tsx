@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 import { AlertaIndicador } from "@/components/servicios-publicos/bits";
@@ -169,7 +169,7 @@ export function AnticiposTabla({
   onOrden: (orden: Orden) => void;
   onAbrir: (id: string) => void;
 }) {
-  const columnas = soloLectura ? COLUMNAS.filter((c) => c.id !== "accion") : COLUMNAS;
+  const columnas = useMemo(() => (soloLectura ? COLUMNAS.filter((c) => c.id !== "accion") : COLUMNAS), [soloLectura]);
   const [pesos, setPesos] = useState<Record<ColumnaId, number>>(PESOS_DEFAULT);
   const tablaRef = useRef<HTMLTableElement>(null);
 
@@ -322,7 +322,7 @@ export function AnticiposTabla({
               seguimiento={seguimientos.get(r.id)!}
               soloLectura={soloLectura}
               tour={i === 0}
-              onAbrir={() => onAbrir(r.id)}
+              onAbrir={onAbrir}
             />
           ))
         )}
@@ -331,7 +331,12 @@ export function AnticiposTabla({
   );
 }
 
-function Fila({
+/**
+ * Memo: al arrastrar un borde de columna (`setPesos` en cada pointermove), al abrir la sheet o al
+ * escribir en el buscador, la tabla se vuelve a pintar; sin memo, cada fila también. Las props son
+ * estables: `row` y `seguimiento` salen de memos del padre y `onAbrir` es un useCallback.
+ */
+const Fila = memo(function Fila({
   row: r,
   seguimiento,
   soloLectura,
@@ -343,7 +348,7 @@ function Fila({
   soloLectura: boolean;
   /** La primera fila es la que señala el recorrido "¿Cómo usar?". */
   tour: boolean;
-  onAbrir: () => void;
+  onAbrir: (id: string) => void;
 }) {
   const celda = "overflow-hidden py-2.5";
   return (
@@ -352,9 +357,9 @@ function Fila({
       data-tour={tour ? "fila" : undefined}
       aria-label={`${r.nombre}, requerimiento ${r.requerimiento}: ${seguimiento.motivo}`}
       className="cursor-pointer outline-none focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      onClick={onAbrir}
+      onClick={() => onAbrir(r.id)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && e.target === e.currentTarget) onAbrir();
+        if (e.key === "Enter" && e.target === e.currentTarget) onAbrir(r.id);
       }}
     >
       <TableCell className={celda}>
@@ -404,4 +409,4 @@ function Fila({
       )}
     </TableRow>
   );
-}
+});

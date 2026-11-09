@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useDeferredValue, useMemo, useState, useTransition } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -156,8 +156,12 @@ export function AnticiposPageClient({
     return { atrasados, pendientes, valorPendiente, devoluciones, legalizados, tasa, excolaboradores, valorRetirados };
   }, [rows, seguimientos]);
 
+  // El input usa `filtros.q` (responde al instante); filtrar y ordenar hasta 1000 filas usa el valor
+  // diferido, que React calcula con prioridad baja sin bloquear el tecleo.
+  const qDiferida = useDeferredValue(filtros.q);
+
   const filas = useMemo(() => {
-    const q = filtros.q.trim().toLowerCase();
+    const q = qDiferida.trim().toLowerCase();
     return rows
       .filter((r) => {
         if (filtros.falta !== TODOS && r.falta !== filtros.falta) return false;
@@ -176,7 +180,7 @@ export function AnticiposPageClient({
         // Pendientes: el más antiguo primero. Resueltos: el más reciente primero.
         return sa.nivel === "ok" ? b.fecha_rq.localeCompare(a.fecha_rq) : a.fecha_rq.localeCompare(b.fecha_rq);
       });
-  }, [rows, filtros, seguimientos]);
+  }, [rows, filtros.falta, filtros.observacion, filtros.seguimiento, filtros.colaborador, qDiferida, seguimientos]);
 
   const ordenadas = useMemo(() => ordenarFilas(filas, orden, seguimientos), [filas, orden, seguimientos]);
 
@@ -197,6 +201,12 @@ export function AnticiposPageClient({
   }, [sheet, rows]);
 
   const cerrarSheet = useCallback(() => setSheet(null), []);
+  // Estables para que las filas memoizadas de la tabla no se vuelvan a pintar al abrir la sheet.
+  const abrirDetalle = useCallback((id: string) => setSheet({ tipo: "detalle", id }), []);
+  const cambiarOrden = useCallback((o: Orden) => {
+    setOrden(o);
+    setLimite(BLOQUE);
+  }, []);
   const cambiarModo = useCallback((m: ModoSheet) => {
     setSheet(m.tipo === "nuevo" ? m : { tipo: m.tipo, id: m.row.id });
   }, []);
@@ -398,11 +408,8 @@ export function AnticiposPageClient({
               seguimientos={seguimientos}
               soloLectura={soloLectura}
               orden={orden}
-              onOrden={(o) => {
-                setOrden(o);
-                setLimite(BLOQUE);
-              }}
-              onAbrir={(id) => setSheet({ tipo: "detalle", id })}
+              onOrden={cambiarOrden}
+              onAbrir={abrirDetalle}
             />
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
               <span className="tabular-nums">

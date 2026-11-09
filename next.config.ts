@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  experimental: {
+    serverActions: {
+      // El Excel de retirados llega por server action y se aceptan hasta 5 MB
+      // (lib/retirados/import.ts); el límite por defecto es 1 MB. Margen para el multipart.
+      bodySizeLimit: "6mb",
+    },
+  },
   // /documentacion/[slug] lee docs/procesos con fs en tiempo de ejecución:
   // sin esto los .md no viajan en la función serverless de Vercel.
   outputFileTracingIncludes: {

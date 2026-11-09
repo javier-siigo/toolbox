@@ -79,7 +79,7 @@ export async function getComisionesData(): Promise<ComisionesData> {
       .select("cohorte, periodo, concepto_id, gasto, motivo"),
     supabase
       .schema("comisiones").from("cierres")
-      .select("*")
+      .select("id, periodo, archivo_nombre, archivo_tamano, gasto_mes, diferido_nuevo, saldo_diferido, asientos, controles, created_at")
       .order("periodo", { ascending: false }),
   ]);
 

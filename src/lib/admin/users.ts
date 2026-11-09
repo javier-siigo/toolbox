@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidateTag } from "next/cache";
+import { updateTag } from "next/cache";
 import { z } from "zod";
 
 import { autorizarAdmin } from "@/lib/auth/acceso";
@@ -105,6 +105,8 @@ export async function updatePermisos(input: UpdatePermisosInput): Promise<Update
     });
   if (error) return { ok: false, error: error.message };
 
-  revalidateTag("permisos", "max");
+  // updateTag (no revalidateTag "max"): la caché expira ya. Con "max" la siguiente petición del
+  // usuario aún leería los permisos viejos, así que un acceso revocado serviría una vez más.
+  updateTag("permisos");
   return { ok: true };
 }

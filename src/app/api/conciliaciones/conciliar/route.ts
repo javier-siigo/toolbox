@@ -4,7 +4,7 @@ import { ConciliacionError, cleanupStorage, conciliarColombia } from "@/lib/conc
 import { getBancoPorSlug } from "@/lib/conciliaciones/bancos";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
 import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
-import { PREVIO_INVALID_TYPE_MESSAGE, isXlsxFilename } from "@/lib/uploads";
+import { PREVIO_INVALID_TYPE_MESSAGE, contentDispositionAdjunto, isXlsxFilename } from "@/lib/uploads";
 
 function jsonError(message: string, code: string, status: number) {
   return NextResponse.json({ error: message, code }, { status });
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     const arrayBuffer = await result.blob.arrayBuffer();
     const headers = new Headers({
       "Content-Type": result.contentType,
-      "Content-Disposition": `attachment; filename="${result.filename}"`,
+      "Content-Disposition": contentDispositionAdjunto(result.filename),
       "Cache-Control": "no-store",
     });
     if (result.registrosNuevos !== null) {

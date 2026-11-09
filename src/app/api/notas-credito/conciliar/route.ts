@@ -11,6 +11,7 @@ import {
   conciliarNotasCredito,
 } from "@/lib/notas-credito/conciliar";
 import { highlightNegativeDifferences } from "@/lib/notas-credito/highlight-differences";
+import { contentDispositionAdjunto } from "@/lib/uploads";
 
 const BUCKET = "notas-credito-uploads";
 
@@ -142,7 +143,7 @@ export async function POST(request: Request) {
       status: 200,
       headers: {
         "Content-Type": result.contentType,
-        "Content-Disposition": `attachment; filename="${result.filename}"`,
+        "Content-Disposition": contentDispositionAdjunto(result.filename),
         "Cache-Control": "no-store",
       },
     });

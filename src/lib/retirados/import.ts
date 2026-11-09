@@ -75,8 +75,11 @@ async function upsertRetirados(
 ): Promise<{ upserted: number; errors: number }> {
   let upserted = 0;
   let errors = 0;
-  for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
-    const batch = rows
+  // Postgres rechaza un upsert que toca la misma cédula dos veces ("cannot affect row a second
+  // time") y se perdería el lote entero. La última fila gana, igual que si cayeran en lotes distintos.
+  const unicos = [...new Map(rows.map((r) => [r.cedula, r])).values()];
+  for (let i = 0; i < unicos.length; i += UPSERT_BATCH) {
+    const batch = unicos
       .slice(i, i + UPSERT_BATCH)
       .map((r) => ({
         cedula: r.cedula,

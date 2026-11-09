@@ -34,3 +34,16 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
+
+/**
+ * `Content-Disposition` de descarga para un nombre que viene de fuera (n8n). Node rechaza
+ * cabeceras con caracteres fuera de Latin-1 (p. ej. "–") y una `"` rompería el valor, así que
+ * `filename` lleva una versión ASCII y `filename*` el nombre real codificado (RFC 6266).
+ */
+export function contentDispositionAdjunto(nombre: string): string {
+  const ascii = nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7e]|["\\%]/g, "_");
+  return `attachment; filename="${ascii || "resultado.xlsx"}"; filename*=UTF-8''${encodeURIComponent(nombre)}`;
+}
