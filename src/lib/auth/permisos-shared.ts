@@ -81,7 +81,11 @@ export function filterAreas(p: Permisos, areas: Area[]): Area[] {
     .map((area) => {
       if (area.slug === "admin") return null;
       const procesos = area.procesos.filter((proc) =>
-        proc.id ? puede(p, proc.id) : puedeAlguno(p, proc.requiere ?? []),
+        proc.soloAdmin
+          ? false
+          : proc.id
+            ? puede(p, proc.id)
+            : puedeAlguno(p, proc.requiere ?? []),
       );
       if (procesos.length === 0) return null;
       return { ...area, procesos };

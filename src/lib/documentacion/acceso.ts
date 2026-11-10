@@ -23,5 +23,6 @@ export async function contextoDocumentacion(): Promise<ContextoDocumentacion> {
 }
 
 export function puedeDocumento(permisos: Permisos, doc: DocumentoMeta): boolean {
-  return permisos.esAdmin || puedeAlguno(permisos, doc.requiere);
+  if (permisos.esAdmin) return true;
+  return !doc.soloAdmin && puedeAlguno(permisos, doc.requiere);
 }

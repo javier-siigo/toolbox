@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   BookOpen,
   Calculator,
+  DatabaseZap,
   FileChartColumn,
   FileText,
   HandCoins,
@@ -26,6 +27,8 @@ export type Proceso = {
   id?: ProcesoId;
   /** Sin `id`: visible con acceso a alguno de estos procesos; vacío = cualquier usuario. Solo Documentación. */
   requiere?: readonly ProcesoId[];
+  /** Solo visible para administradores. */
+  soloAdmin?: boolean;
 };
 
 export type Area = {
@@ -154,6 +157,7 @@ export const AREAS: Area[] = [
       description: d.descripcion,
       icon: FileText,
       requiere: d.requiere,
+      soloAdmin: d.soloAdmin,
     })),
   },
   {
@@ -168,6 +172,12 @@ export const AREAS: Area[] = [
         label: "Usuarios y roles",
         description: "Asigna roles y permisos a los miembros del equipo.",
         icon: Settings,
+      },
+      {
+        slug: "suiteql",
+        label: "Consola SuiteQL",
+        description: "Ejecuta queries SuiteQL contra NetSuite y revisa el resultado.",
+        icon: DatabaseZap,
       },
     ],
   },

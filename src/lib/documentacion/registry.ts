@@ -13,6 +13,8 @@ export interface DocumentoMeta {
   descripcion: string;
   /** Basta con acceso (cualquier nivel) a uno de estos procesos. Vacío: cualquier usuario autenticado. */
   requiere: readonly ProcesoId[];
+  /** Solo lo ven los administradores (ignora `requiere`). */
+  soloAdmin?: boolean;
 }
 
 export const DOCUMENTOS: readonly DocumentoMeta[] = [
@@ -71,6 +73,15 @@ export const DOCUMENTOS: readonly DocumentoMeta[] = [
     titulo: "Servicios públicos",
     descripcion: "Seguimiento de recibos: estados, fechas de corte, alertas, pagos y soportes.",
     requiere: [PROCESOS.SERVICIOS_PUBLICOS],
+  },
+  {
+    slug: "alcance-suitetalk",
+    archivo: "90-alcance-suitetalk.md",
+    titulo: "Alcance de SuiteTalk",
+    descripcion:
+      "Qué datos de NetSuite expone la integración SuiteTalk del portal: tablas SuiteQL, registros REST, límites y ejemplos.",
+    requiere: [],
+    soloAdmin: true,
   },
 ];
 

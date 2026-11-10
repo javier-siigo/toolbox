@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, LogOut, Users } from "lucide-react";
+import { BookOpen, DatabaseZap, LogOut, Users } from "lucide-react";
 
 import { logoutAction } from "@/lib/auth/actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -72,6 +72,14 @@ export function UserMenu({ name, email, esAdmin }: UserMenuProps) {
             <Link href="/admin/usuarios" className="flex w-full cursor-pointer items-center gap-2">
               <Users className="h-4 w-4" />
               Usuarios y roles
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {esAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin/suiteql" className="flex w-full cursor-pointer items-center gap-2">
+              <DatabaseZap className="h-4 w-4" />
+              Consola SuiteQL
             </Link>
           </DropdownMenuItem>
         )}
