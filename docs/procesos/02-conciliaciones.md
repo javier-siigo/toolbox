@@ -110,9 +110,7 @@ El navegador consulta cada 4 s (máx. 15 min). La ruta exige el mismo acceso `us
 | `resultUploadUrl` | texto | URL firmada de Supabase donde n8n sube el Excel (`PUT`) |
 | `statusUploadUrl` | texto | URL firmada donde n8n sube el estado JSON (`PUT`, `application/octet-stream` porque el bucket no admite `application/json`) |
 
-**Response:** `202 { ok, executionId }` en cuanto n8n recibe los archivos (nodo *Responder recibido*). Al terminar, n8n sube el Excel (*Subir Excel*) y luego el estado `{ ok: true, fileName, nuevos, existentes, fueraPeriodo }` (*Subir estado*). Si falla cualquier nodo del orquestador (salida de error → *Subir error*), sube `{ ok: false, error }`.
-
-Sin `resultUploadUrl` el flujo sigue siendo síncrono (responde el Excel con headers `X-Registros-*`, o `500 { error }`); se dejó por compatibilidad durante el despliegue.
+**Response:** `202 { ok, executionId }` en cuanto n8n recibe los archivos (nodo *Responder recibido*). Al terminar, n8n sube el Excel (*Subir Excel*) y luego el estado `{ ok: true, fileName, nuevos, existentes, fueraPeriodo }` (*Subir estado*). Si falla cualquier nodo del orquestador (salida de error → *Subir error*), sube `{ ok: false, error }`. Ya no hay modo síncrono: sin esas URLs, n8n responde 202 pero no tiene dónde dejar el resultado.
 
 > Todos los bancos apuntan al mismo webhook (`/webhook/reconciliation`). **n8n elige el adapter del banco según el campo `banco` (slug)**, por configuración en n8n; la lógica de conciliación vive allí, no en este repo. Un banco nuevo solo necesita su fila en `conciliaciones.bancos` con un slug que coincida con su adapter.
 
