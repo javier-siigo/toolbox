@@ -47,12 +47,22 @@ export interface InputFile {
   originalName: string;
 }
 
-// Algunos bancos tardan varios minutos en n8n. Queda por debajo del
-// maxDuration (300 s) de la ruta para devolver un error claro en vez del 504 de Vercel.
-const REQUEST_TIMEOUT_MS = 280_000;
+// n8n responde 202 en cuanto recibe los archivos; la conciliación sigue en segundo plano
+// (n8n Cloud corta en 100 s cualquier respuesta de webhook).
+const REQUEST_TIMEOUT_MS = 60_000;
 const FALLBACK_FILENAME = "resultado_conciliacion.xlsx";
-const FALLBACK_CONTENT_TYPE =
+const XLSX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+export function safeUserId(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/** Dónde deja n8n el resultado de un trabajo: el Excel y su estado (`{ ok, ... }`). */
+export function rutasResultado(userId: string, jobId: string) {
+  const base = `${safeUserId(userId)}/resultado/${jobId}`;
+  return { excel: `${base}.xlsx`, estado: `${base}.json` };
+}
 
 export function validateFileMeta(filename: string, size: number, contentType: string): void {
   if (size <= 0) {
@@ -77,22 +87,8 @@ export function validateFileMeta(filename: string, size: number, contentType: st
   }
 }
 
-function extractFilename(contentDisposition: string | null): string {
-  if (!contentDisposition) return FALLBACK_FILENAME;
-  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition)?.[1];
-  if (utf8) {
-    try {
-      return decodeURIComponent(utf8);
-    } catch {
-      return FALLBACK_FILENAME;
-    }
-  }
-  const plain = /filename="?([^";]+)"?/i.exec(contentDisposition)?.[1];
-  return plain?.trim() || FALLBACK_FILENAME;
-}
-
-function parseCount(value: string | null): number | null {
-  if (value === null || value.trim() === "") return null;
+function parseCount(value: unknown): number | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -147,9 +143,28 @@ export interface ConciliarArgs {
   periodo: PeriodoVigente;
   principal: InputFile;
   previo?: InputFile;
+  /** Dueño del trabajo: el resultado queda bajo su carpeta. */
+  userId: string;
+  jobId: string;
 }
 
-export async function conciliarColombia(args: ConciliarArgs): Promise<ConciliacionResult> {
+async function urlSubidaFirmada(path: string): Promise<string> {
+  const { data, error } = await createAdminClient().storage.from(BUCKET).createSignedUploadUrl(path);
+  if (error || !data) {
+    throw new ConciliacionError(
+      "No se pudo preparar dónde guardar el resultado.",
+      "upstream_config",
+      500,
+    );
+  }
+  return data.signedUrl;
+}
+
+/**
+ * Envía los archivos a n8n y vuelve en cuanto n8n confirma que los recibió (202).
+ * n8n sube el Excel y su estado a `rutasResultado(userId, jobId)`; se leen con `leerResultado`.
+ */
+export async function iniciarConciliacion(args: ConciliarArgs): Promise<void> {
   const env = serverEnv();
   if (!args.webhookUrl) {
     throw new ConciliacionError(
@@ -176,6 +191,9 @@ export async function conciliarColombia(args: ConciliarArgs): Promise<Conciliaci
   if (previoFile) {
     formData.append("previous", previoFile.file, previoFile.file.name);
   }
+  const rutas = rutasResultado(args.userId, args.jobId);
+  formData.append("resultUploadUrl", await urlSubidaFirmada(rutas.excel));
+  formData.append("statusUploadUrl", await urlSubidaFirmada(rutas.estado));
 
   const headers: Record<string, string> = {};
   if (env.N8N_WEBHOOK_SECRET) {
@@ -194,38 +212,20 @@ export async function conciliarColombia(args: ConciliarArgs): Promise<Conciliaci
       cache: "no-store",
     });
 
-    if (!response.ok) {
+    // 202 = recibido. Un 200 sería el flujo síncrono viejo (no manda resultado a Storage).
+    if (response.status !== 202) {
       throw new ConciliacionError(
         `n8n respondió ${response.status}`,
         "upstream_status",
-        response.status,
+        response.ok ? 502 : response.status,
       );
     }
-
-    const blob = await response.blob();
-    if (blob.size === 0) {
-      throw new ConciliacionError(
-        "n8n devolvió una respuesta vacía",
-        "upstream_empty",
-        502,
-      );
-    }
-
-    return {
-      blob,
-      filename: extractFilename(response.headers.get("content-disposition")),
-      contentType:
-        response.headers.get("content-type")?.split(";")[0]?.trim() ||
-        FALLBACK_CONTENT_TYPE,
-      registrosNuevos: parseCount(response.headers.get("x-registros-nuevos")),
-      registrosExistentes: parseCount(response.headers.get("x-registros-existentes")),
-      registrosFueraPeriodo: parseCount(response.headers.get("x-registros-fuera-periodo")),
-    };
+    await response.body?.cancel();
   } catch (err) {
     if (err instanceof ConciliacionError) throw err;
     if ((err as Error).name === "AbortError") {
       throw new ConciliacionError(
-        "Tiempo de espera agotado al llamar a n8n",
+        "n8n no confirmó la recepción de los archivos",
         "upstream_timeout",
         504,
       );
@@ -238,6 +238,55 @@ export async function conciliarColombia(args: ConciliarArgs): Promise<Conciliaci
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Descarga un archivo del bucket; null si todavía no existe. */
+async function descargarSiExiste(path: string): Promise<Blob | null> {
+  const { data, error } = await createAdminClient().storage.from(BUCKET).download(path);
+  if (data) return data;
+  const msg = `${error?.message ?? ""} ${(error as { status?: number } | null)?.status ?? ""}`.toLowerCase();
+  if (msg.includes("not found") || msg.includes("400") || msg.includes("404")) return null;
+  throw new ConciliacionError("No se pudo leer el resultado.", "storage_unauthorized", 502);
+}
+
+/**
+ * Resultado de un trabajo: null mientras n8n no termine. Lanza ConciliacionError si n8n
+ * informó un error. Borra los archivos del resultado una vez leídos.
+ */
+export async function leerResultado(userId: string, jobId: string): Promise<ConciliacionResult | null> {
+  const rutas = rutasResultado(userId, jobId);
+  const estadoBlob = await descargarSiExiste(rutas.estado);
+  if (!estadoBlob) return null;
+
+  let estado: Record<string, unknown>;
+  try {
+    estado = JSON.parse(await estadoBlob.text());
+  } catch {
+    estado = { ok: false, error: "n8n dejó un estado ilegible." };
+  }
+  if (estado.ok !== true) {
+    void cleanupStorage([rutas.estado, rutas.excel]);
+    throw new ConciliacionError(
+      typeof estado.error === "string" && estado.error ? estado.error : "La conciliación falló en n8n.",
+      "upstream_status",
+      502,
+    );
+  }
+
+  const blob = await descargarSiExiste(rutas.excel);
+  if (!blob || blob.size === 0) {
+    void cleanupStorage([rutas.estado, rutas.excel]);
+    throw new ConciliacionError("El servicio devolvió un archivo vacío.", "upstream_empty", 502);
+  }
+  void cleanupStorage([rutas.estado, rutas.excel]);
+  return {
+    blob,
+    filename: typeof estado.fileName === "string" && estado.fileName ? estado.fileName : FALLBACK_FILENAME,
+    contentType: XLSX_CONTENT_TYPE,
+    registrosNuevos: parseCount(estado.nuevos),
+    registrosExistentes: parseCount(estado.existentes),
+    registrosFueraPeriodo: parseCount(estado.fueraPeriodo),
+  };
 }
 
 export async function cleanupStorage(paths: string[]): Promise<void> {

@@ -61,12 +61,31 @@ const ERROR_MESSAGES: Record<ErrorCode, string> = {
   storage_unauthorized: "No tienes acceso a este archivo.",
   storage_not_found: "El archivo subido ya no está disponible. Súbelo de nuevo.",
   upstream_config: "Falta configurar la URL del flujo de conciliación.",
-  upstream_timeout: "La conciliación tardó más de 5 minutos.",
+  upstream_timeout: "El servicio de conciliación no respondió a tiempo.",
   upstream_network: "No se pudo contactar el servicio de conciliación.",
   upstream_status: "El servicio de conciliación devolvió un error.",
   upstream_empty: "El servicio devolvió un archivo vacío.",
   internal: "Error inesperado al conciliar.",
 };
+
+const POLL_INTERVAL_MS = 4_000;
+const POLL_TIMEOUT_MS = 15 * 60_000;
+
+/** Espera `ms`; se corta con AbortError si se cancela la conciliación. */
+function esperar(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abortar = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abortar);
+      resolve();
+    }, ms);
+    if (signal.aborted) abortar();
+    else signal.addEventListener("abort", abortar, { once: true });
+  });
+}
 
 function asErrorCode(value: string | undefined): ErrorCode {
   return value && value in ERROR_MESSAGES ? (value as ErrorCode) : "internal";
@@ -397,7 +416,7 @@ export function ConciliacionesPageClient({
 
         setCurrentRun({ ...baseRun, status: "processing" });
 
-        const conciliarRes = await fetch("/api/conciliaciones/conciliar", {
+        let conciliarRes = await fetch("/api/conciliaciones/conciliar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -411,6 +430,24 @@ export function ConciliacionesPageClient({
           }),
           signal,
         });
+
+        // n8n trabaja en segundo plano: el POST devuelve 202 { jobId } y se consulta hasta
+        // que el GET deje de responder 202 (Excel listo o error).
+        if (conciliarRes.status === 202) {
+          const { jobId } = (await conciliarRes.json()) as { jobId: string };
+          const limite = Date.now() + POLL_TIMEOUT_MS;
+          do {
+            if (Date.now() > limite) {
+              fail("La conciliación tardó más de 15 minutos. Revisa el flujo en n8n e intenta de nuevo.");
+              return;
+            }
+            await esperar(POLL_INTERVAL_MS, signal);
+            conciliarRes = await fetch(
+              `/api/conciliaciones/conciliar?pais=${encodeURIComponent(pais)}&job=${jobId}`,
+              { cache: "no-store", signal },
+            );
+          } while (conciliarRes.status === 202);
+        }
 
         if (!conciliarRes.ok) {
           const payload = (await conciliarRes.json().catch(() => null)) as

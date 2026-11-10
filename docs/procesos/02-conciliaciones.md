@@ -22,7 +22,7 @@ Un proceso por país (`conciliaciones.colombia`, `conciliaciones.mexico`…). La
 
 1. Elige el **banco** (combobox; lista desde BD, solo bancos activos del país). Cambiar de banco limpia el resultado. Debajo aparece el **periodo vigente** del banco ("Conciliando noviembre 2026 hasta el 3 de diciembre") y, con nivel `usar`, el botón **Cambiar periodo** (ver [Periodo por banco](#periodo-por-banco)).
 2. Sube el **Extracto bancario** (obligatorio) y, si la tiene, la **Conciliación anterior (Excel de contadores)** (opcional). El extracto acepta `.xlsx`, `.xls`, `.csv`; la conciliación anterior solo `.xlsx` (se valida al elegirla y antes de enviar). Máx. 10 MB c/u.
-3. Pulsa **Procesar conciliación**. Se ve el estado "Procesando…".
+3. Pulsa **Procesar conciliación**. Se ve el estado "Procesando…" mientras n8n trabaja en segundo plano (la página consulta el resultado cada 4 s).
 4. Al terminar, aparece **Descargar** con el Excel resultante. Se puede cancelar quitando el archivo o el banco (aborta las peticiones en curso).
 
 ## Flujo técnico
@@ -45,9 +45,15 @@ sequenceDiagram
     C->>D: getBancoPorSlug(pais, banco) → webhook_url
     C->>S: download principal (+ previo)
     C->>W: POST multipart (x-webhook-secret)
-    W-->>C: Excel (binario)
+    W-->>C: 202 recibido
     C->>S: remove archivos (best-effort)
-    C-->>B: Excel (attachment)
+    C-->>B: 202 { jobId }
+    W->>S: PUT Excel + estado.json (URLs firmadas)
+    loop cada 4 s
+        B->>C: GET ?job=jobId
+        C->>S: ¿estado.json?
+        C-->>B: 202 pendiente | Excel (attachment) | error
+    end
 ```
 
 ### Paso 1 — `POST /api/conciliaciones/upload-url`
@@ -66,14 +72,25 @@ El navegador hace `PUT` del archivo a la URL firmada (no pasa por Next).
 
 Archivos: `src/app/api/conciliaciones/conciliar/route.ts`, `src/lib/conciliaciones/conciliar.ts`, `src/lib/conciliaciones/bancos.ts`
 
-1. Valida sesión y cuerpo. `maxDuration = 90` s.
+La conciliación es **asíncrona**: n8n Cloud corta en 100 s cualquier respuesta de webhook (Cloudflare 524) y un banco con muchos días de NetSuite tarda más.
+
+1. Valida sesión y cuerpo. `maxDuration = 120` s.
 2. Comprueba que `storagePathPrincipal` (y `storagePathPrevio`) empiecen por `{userId}/principal/` o `{userId}/previo/` y no contengan más `/`. Si no: 403 `storage_unauthorized`. Si hay previo y su nombre original no es `.xlsx`: 415 `invalid_type`.
 3. Busca el banco (`getBancoPorSlug`) en `conciliaciones.bancos` por `pais` + `slug`. Si no existe o `activo = false`: 400 `upstream_config`.
-4. `conciliarColombia(...)` (nombre histórico; sirve a todos los países):
+4. `iniciarConciliacion(...)`:
    - Descarga cada archivo del bucket con el cliente admin y los **revalida** (no vacío, ≤ 10 MB, tipo).
-   - Arma `FormData` y hace `POST` al `webhook_url` del banco con header `x-webhook-secret` y timeout de **60 s**.
-5. Devuelve el binario con `Content-Disposition: attachment` (nombre tomado de la cabecera de n8n; si no viene: `resultado_conciliacion.xlsx`) y `Cache-Control: no-store`. Reenvía `X-Registros-Nuevos` y `X-Registros-Existentes` si n8n los envía; la UI los muestra junto al botón de descarga.
-6. Limpia los archivos del bucket (también cuando hay error de conciliación).
+   - Crea un `jobId` y dos URLs firmadas de subida en `{userId}/resultado/{jobId}.xlsx` y `.json`.
+   - Arma `FormData` (con `resultUploadUrl` y `statusUploadUrl`) y hace `POST` al `webhook_url` con `x-webhook-secret`; espera el **202** de n8n (timeout 60 s).
+5. Borra los archivos de entrada y responde `202 { jobId }`.
+
+### Paso 4 — `GET /api/conciliaciones/conciliar?pais=&job=`
+
+El navegador consulta cada 4 s (máx. 15 min). La ruta exige el mismo acceso `usar` del país y arma la ruta del resultado con el usuario de la sesión (nadie lee el de otro).
+
+- Sin `{jobId}.json` todavía: `202 { status: "pending" }`.
+- Estado `{ ok: false, error }`: devuelve `{ error, code: "upstream_status" }` (502) con el mensaje de n8n.
+- Estado `{ ok: true, fileName, nuevos, existentes, fueraPeriodo }`: devuelve el Excel con `Content-Disposition` y los headers `X-Registros-*`, como antes.
+- Al leer el resultado borra los dos archivos; los que queden huérfanos los borra la limpieza diaria del bucket.
 
 ## Contrato con n8n
 
@@ -90,8 +107,12 @@ Archivos: `src/app/api/conciliaciones/conciliar/route.ts`, `src/lib/conciliacion
 | `periodoCierre` | texto | fecha de cierre configurada, `YYYY-MM-DD` (solo si hay una vigente) |
 | `file` | archivo | extracto bancario (obligatorio) |
 | `previous` | archivo | conciliación anterior de los contadores, `.xlsx` (opcional; solo si se subió) |
+| `resultUploadUrl` | texto | URL firmada de Supabase donde n8n sube el Excel (`PUT`) |
+| `statusUploadUrl` | texto | URL firmada donde n8n sube el estado JSON (`PUT`, `application/octet-stream` porque el bucket no admite `application/json`) |
 
-**Response esperada:** archivo binario (por defecto Excel `.xlsx`), con headers opcionales `X-Registros-Nuevos`, `X-Registros-Existentes` y `X-Registros-Fuera-Periodo` (enteros; el último son los registros descartados por fecha). Cualquier estado no 2xx, respuesta vacía, timeout o fallo de red se traduce a error.
+**Response:** `202 { ok, executionId }` en cuanto n8n recibe los archivos (nodo *Responder recibido*). Al terminar, n8n sube el Excel (*Subir Excel*) y luego el estado `{ ok: true, fileName, nuevos, existentes, fueraPeriodo }` (*Subir estado*). Si falla cualquier nodo del orquestador (salida de error → *Subir error*), sube `{ ok: false, error }`.
+
+Sin `resultUploadUrl` el flujo sigue siendo síncrono (responde el Excel con headers `X-Registros-*`, o `500 { error }`); se dejó por compatibilidad durante el despliegue.
 
 > Todos los bancos apuntan al mismo webhook (`/webhook/reconciliation`). **n8n elige el adapter del banco según el campo `banco` (slug)**, por configuración en n8n; la lógica de conciliación vive allí, no en este repo. Un banco nuevo solo necesita su fila en `conciliaciones.bancos` con un slug que coincida con su adapter.
 
@@ -127,7 +148,8 @@ Los contadores definen en el portal, **por banco**, el mes que concilian y hasta
   - hoy ≤ `periodo_cierre` → se concilia el mes configurado.
   - pasado el cierre o sin configurar → se concilia el **mes en curso**.
 - **n8n:** el servidor (no el navegador) calcula el periodo y lo envía como `periodo`, `periodoDesde`, `periodoHasta` y `periodoCierre` a `/webhook/reconciliation` y a los webhooks de unificación (`banorte-txt-a-excel`, `unificar-extractos`). Cada flujo debe filtrar las filas del extracto con `periodoDesde ≤ fecha ≤ periodoHasta` antes de conciliar y, si quiere, informar las descartadas en `X-Registros-Fuera-Periodo`. La conciliación anterior (`previous`) no se filtra: trae los pendientes de meses previos.
-  - En el orquestador `Reconciliation (Webhook)`: **Classify Files** fuerza `overrides.netsuite.desde/hasta` al mes del periodo, así todos los adapters consultan NetSuite solo en ese mes (hasta fin de mes cuando ya pasó; si el mes sigue en curso, cada adapter usa su tope por defecto). **Aplicar periodo** descarta además cualquier registro de NetSuite con fecha contable fuera del mes, aunque cruce por llave: en *Fecha Contable* solo aparecen registros del mes conciliado.
+  - En el orquestador `Reconciliation (Webhook)`: **Classify Files** fuerza `overrides.netsuite.desde/hasta` al mes del periodo, así todos los adapters consultan NetSuite solo en ese mes (hasta fin de mes cuando ya pasó; si el mes sigue en curso, cada adapter usa su tope por defecto). **Aplicar periodo** descarta además los registros de NetSuite con fecha contable fuera del mes, salvo los que cruzan por llave con un movimiento del extracto del periodo (p. ej. venta con tarjeta del 30/10 abonada el 03/11).
+  - México: los adapters consultan NetSuite **hasta ayer** (como el adapter General), aunque el extracto llegue a una fecha anterior; lo posterior al extracto sale como *Solo en NetSuite*. Banorte ubica el extracto en el periodo por **Fecha Abono** y consulta NetSuite desde la *Fecha Transacción* más antigua de esos abonos (máx. 10 días antes del mes), porque NetSuite registra la venta en la fecha de transacción.
   - Excel: la columna **G = Cuenta** (cuenta contable del banco en NetSuite) va antes de *ID Interno*. Un archivo anterior con el layout viejo (G = ID Interno) se sigue actualizando con su layout, sin la columna.
 
 ## Particularidades por banco

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { ConciliacionError, cleanupStorage, conciliarColombia } from "@/lib/conciliaciones/conciliar";
+import {
+  ConciliacionError,
+  cleanupStorage,
+  iniciarConciliacion,
+  leerResultado,
+  safeUserId,
+} from "@/lib/conciliaciones/conciliar";
 import { getBancoPorSlug } from "@/lib/conciliaciones/bancos";
 import { hoyEnPais, periodoVigente } from "@/lib/conciliaciones/periodo";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
@@ -16,8 +22,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 120;
 
+const JOB_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Inicia la conciliación en n8n y devuelve `202 { jobId }`; el resultado se consulta con GET. */
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -89,7 +98,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await conciliarColombia({
+    const jobId = crypto.randomUUID();
+    await iniciarConciliacion({
+      userId,
+      jobId,
       webhookUrl: bancoRow.webhookUrl,
       pais,
       banco,
@@ -112,8 +124,54 @@ export async function POST(request: Request) {
           : undefined,
     });
 
+    // n8n ya tiene los archivos: los de entrada se pueden borrar.
     void cleanupStorage(pathsToCleanup);
-    const arrayBuffer = await result.blob.arrayBuffer();
+    return NextResponse.json({ jobId }, { status: 202, headers: { "Cache-Control": "no-store" } });
+  } catch (err) {
+    if (err instanceof ConciliacionError) {
+      void cleanupStorage(pathsToCleanup);
+      const message =
+        err.code === "upstream_status" && err.status >= 500
+          ? "El servicio de conciliación no está disponible. Intenta de nuevo."
+          : err.code === "upstream_timeout"
+            ? "El servicio de conciliación no respondió. Intenta de nuevo."
+            : err.message;
+      return NextResponse.json(
+        { error: message, code: err.code },
+        { status: err.status },
+      );
+    }
+    void cleanupStorage(pathsToCleanup);
+    return NextResponse.json(
+      { error: "Error inesperado al conciliar", code: "internal" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * Estado de un trabajo: `202 { status: "pending" }` mientras n8n trabaja; al terminar, el Excel
+ * (con los headers X-Registros-*) o `{ error, code }` si n8n informó un error.
+ */
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const pais = params.get("pais") ?? "";
+  const jobId = params.get("job") ?? "";
+  const proceso = CONCILIACION_POR_PAIS[pais];
+  if (!proceso) return jsonError("País no válido", "bad_request", 400);
+  if (!JOB_ID_RE.test(jobId)) return jsonError("Trabajo no válido", "bad_request", 400);
+  const acceso = await autorizar(proceso, "usar");
+  if (!acceso.ok) return respuestaDenegada(acceso);
+
+  try {
+    // La ruta sale del usuario de la sesión: nadie lee el resultado de otro.
+    const result = await leerResultado(acceso.userId, jobId);
+    if (!result) {
+      return NextResponse.json(
+        { status: "pending" },
+        { status: 202, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const headers = new Headers({
       "Content-Type": result.contentType,
       "Content-Disposition": contentDispositionAdjunto(result.filename),
@@ -128,33 +186,16 @@ export async function POST(request: Request) {
     if (result.registrosFueraPeriodo !== null) {
       headers.set("X-Registros-Fuera-Periodo", String(result.registrosFueraPeriodo));
     }
-    return new Response(arrayBuffer, { status: 200, headers });
+    return new Response(await result.blob.arrayBuffer(), { status: 200, headers });
   } catch (err) {
     if (err instanceof ConciliacionError) {
-      void cleanupStorage(pathsToCleanup);
-      const message =
-        err.code === "upstream_status" && err.status >= 500
-          ? "El servicio de conciliación no está disponible. Intenta de nuevo."
-          : err.code === "upstream_timeout"
-            ? "La conciliación tardó más de 5 minutos. Revisa el flujo en n8n o intenta con un archivo más pequeño."
-            : err.code === "upstream_empty"
-              ? "El servicio devolvió un archivo vacío."
-              : err.message;
-      return NextResponse.json(
-        { error: message, code: err.code },
-        { status: err.status },
-      );
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
-    void cleanupStorage(pathsToCleanup);
     return NextResponse.json(
-      { error: "Error inesperado al conciliar", code: "internal" },
+      { error: "Error inesperado al leer la conciliación", code: "internal" },
       { status: 500 },
     );
   }
-}
-
-function safeUserId(raw: string): string {
-  return raw.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function isValidStoragePath(
