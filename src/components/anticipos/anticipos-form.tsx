@@ -22,6 +22,8 @@ import {
   todayIsoDate,
   type AnticipoCreateInput,
 } from "@/lib/anticipos/schema";
+import { formatAnticipoFecha } from "@/lib/anticipos/format";
+import { DIAS_LEGALIZACION, fechaMaximaLegalizacion } from "@/lib/anticipos/seguimiento";
 import { cn } from "@/lib/utils";
 
 type AnticiposFormErrorShape = {
@@ -101,6 +103,8 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
   } = form;
 
   const errs = errors as unknown as AnticiposFormErrorShape;
+  const fechaFinal = (watch("fecha_rq" as Path<T>) as string | undefined) ?? "";
+  const fechaMaxima = fechaMaximaLegalizacion(fechaFinal);
   const observacion2Value =
     (watch("observacion_2" as Path<T>) as string | undefined) ?? "";
 
@@ -336,7 +340,7 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="anticipo-fecha-rq">
-                  Fecha de RQ
+                  Fecha final
                   <RequiredMark />
                 </Label>
                 <Input
@@ -353,6 +357,23 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
                     {errs.fecha_rq.message}
                   </FieldError>
                 ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="anticipo-fecha-max">Fecha máxima de legalización</Label>
+                <Input
+                  id="anticipo-fecha-max"
+                  readOnly
+                  tabIndex={-1}
+                  value={fechaMaxima ? formatAnticipoFecha(fechaMaxima) : ""}
+                  placeholder="Se calcula sola"
+                  className="bg-muted font-mono tabular-nums"
+                  aria-describedby="anticipo-fecha-max-hint"
+                />
+                <span id="anticipo-fecha-max-hint">
+                  <FieldHint>
+                    {DIAS_LEGALIZACION} días corridos desde el día siguiente a la fecha final.
+                  </FieldHint>
+                </span>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="anticipo-fecha-gestion">

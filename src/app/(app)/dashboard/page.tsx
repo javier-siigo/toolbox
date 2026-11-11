@@ -6,7 +6,7 @@ import { filterAreas } from "@/lib/auth/permisos-shared";
 import { periodoActual, periodoLabel, shiftPeriodo } from "@/lib/comisiones/calculo";
 import {
   ahoraBogota,
-  DIAS_ATRASO,
+  DIAS_LEGALIZACION,
   resumenInicio,
   type ResumenInicio,
 } from "@/lib/inicio/resumen";
@@ -49,7 +49,7 @@ function itemsAtencion(r: ResumenInicio): ItemAtencion[] {
       id: "anticipos-atrasados",
       tono: "rojo",
       cifra: { tipo: "numero", valor: a.atrasados },
-      titulo: `${plural(a.atrasados, "Anticipo", "Anticipos")} sin gestión hace más de ${DIAS_ATRASO} días`,
+      titulo: `${plural(a.atrasados, "Anticipo vencido", "Anticipos vencidos")} (pasaron los ${DIAS_LEGALIZACION} días para legalizar)`,
       detalle: `Gestión de anticipos · de ${a.pendientes} pendientes`,
       accion: { label: "Ver anticipos", href: "/ingresos-egresos/gestion-anticipos" },
     });

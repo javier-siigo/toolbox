@@ -11,7 +11,7 @@ export const TOUR_ANTICIPOS: TourStep[] = [
     target: "indicadores",
     title: "El estado de un vistazo",
     description:
-      "Cuántos anticipos están atrasados, cuántos siguen sin resolver y por qué valor, las devoluciones, los legalizados y los de excolaboradores. Haz clic en uno para filtrar la tabla.",
+      "Cuántos anticipos están vencidos, cuántos siguen sin resolver y por qué valor, las devoluciones, los legalizados y los de excolaboradores. Haz clic en uno para filtrar la tabla.",
     side: "bottom",
   },
   {
@@ -25,7 +25,7 @@ export const TOUR_ANTICIPOS: TourStep[] = [
     target: "nuevo",
     title: "1. Registra un anticipo",
     description:
-      "Abre el formulario con el colaborador, el código de requerimiento, el valor, la fecha de RQ, qué falta y la observación de seguimiento.",
+      "Abre el formulario con el colaborador, el código de requerimiento, el valor, la fecha final (la máxima de legalización se calcula sola), qué falta y la observación de seguimiento.",
     side: "bottom",
   },
   {
@@ -38,7 +38,7 @@ export const TOUR_ANTICIPOS: TourStep[] = [
     target: "filtros",
     title: "Filtra la tabla",
     description:
-      "Filtra por el semáforo (atrasados, en plazo, resueltos), por lo que falta, por la observación de seguimiento o deja solo los excolaboradores. Limpiar filtros vuelve a la vista completa.",
+      "Filtra por el semáforo (vencidos, en plazo, resueltos), por lo que falta, por la observación de seguimiento o deja solo los excolaboradores. Limpiar filtros vuelve a la vista completa.",
     side: "bottom",
   },
   {
@@ -52,7 +52,7 @@ export const TOUR_ANTICIPOS: TourStep[] = [
     target: "fila",
     title: "3. Actualiza el seguimiento",
     description:
-      "Haz clic en una fila para ver el detalle en el panel lateral: desde ahí lo editas, lo legalizas o lo eliminas. Con «Legalizar» al final de la fila lo cierras sin abrirlo. Por defecto va primero lo atrasado; haz clic en un encabezado para ordenar por esa columna y arrastra su borde para ajustar el ancho (doble clic lo restablece).",
+      "Haz clic en una fila para ver el detalle en el panel lateral: desde ahí lo editas, lo legalizas o lo eliminas. Con «Legalizar» al final de la fila lo cierras sin abrirlo. Por defecto va primero lo vencido; haz clic en un encabezado para ordenar por esa columna y arrastra su borde para ajustar el ancho (doble clic lo restablece).",
     side: "bottom",
   },
 ];

@@ -45,7 +45,7 @@ import {
   type AnticipoRow,
   type AnticipoUpdateInput,
 } from "@/lib/anticipos/schema";
-import { NIVEL_SEGUIMIENTO_LABEL, seguimientoDe } from "@/lib/anticipos/seguimiento";
+import { fechaMaximaLegalizacion, NIVEL_SEGUIMIENTO_LABEL, seguimientoDe } from "@/lib/anticipos/seguimiento";
 import { cn } from "@/lib/utils";
 
 import { AnticiposFormFields, ANTICIPOS_DEFAULT_VALUES } from "./anticipos-form";
@@ -164,8 +164,10 @@ function Detalle({
             <dd className="min-w-0">
               <ObservacionBadge value={row.observacion_1} />
             </dd>
-            <dt className="text-muted-foreground">Fecha de RQ</dt>
+            <dt className="text-muted-foreground">Fecha final</dt>
             <dd className="font-mono tabular-nums">{formatAnticipoFecha(row.fecha_rq)}</dd>
+            <dt className="text-muted-foreground">Fecha máxima de legalización</dt>
+            <dd className="font-mono tabular-nums">{formatAnticipoFecha(fechaMaximaLegalizacion(row.fecha_rq))}</dd>
             <dt className="text-muted-foreground">Fecha de gestión</dt>
             <dd className="font-mono tabular-nums">{formatAnticipoFecha(row.fecha_gestion)}</dd>
           </dl>

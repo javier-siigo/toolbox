@@ -29,7 +29,7 @@ Tabla `anticipos.registros`:
 | `observacion_1` | enum `anticipos_observacion_1_enum` | Estado de la gestión de contacto |
 | `observacion_2` | texto (≤ 500), opcional | Nota libre |
 | `valor` | numeric(14,0) ≥ 0, opcional | Valor del anticipo en pesos (migración `20261103120000`). El formulario acepta `1500000`, `1.500.000` o `$ 1.500.000` |
-| `fecha_rq` | fecha `YYYY-MM-DD` | Fecha del requerimiento |
+| `fecha_rq` | fecha `YYYY-MM-DD` | **Fecha final** del anticipo (en la UI se llama así; la columna conserva el nombre). La **fecha máxima de legalización** no se guarda: es `fecha_rq + 8` días corridos (`fechaMaximaLegalizacion`). |
 | `fecha_gestion` | fecha, opcional | Fecha de la última gestión |
 | `nombre_normalizado` | generada | Nombre sin tildes/mayúsculas, tokens ordenados |
 | `created_at/by`, `updated_at/by` | | Auditoría |
@@ -72,9 +72,9 @@ Validaciones: `fecha_rq` debe ser una fecha válida; `fecha_gestion` puede ir va
 
 `src/components/anticipos/` — mismo esquema que [Servicios públicos](07-servicios-publicos.md) (reusa `Indicador`, `FiltroSelect` y `AlertaIndicador` de `servicios-publicos/bits.tsx`).
 
-- **Semáforo** (`src/lib/anticipos/seguimiento.ts`, única fuente de la regla): *Resuelto* (legalizado o con fecha de gestión), *En plazo* y *Atrasado* (≥ 10 días desde la fecha de RQ sin gestión). "Hoy" lo calcula el servidor en hora de Colombia. Lo usan la tabla, los indicadores, el detalle y el Excel.
-- **Indicadores** clicables (filtran la tabla): atrasados, sin resolver (con su valor), devoluciones, legalizados (% del total) y excolaboradores (valor pendiente según el reporte de Contabilidad).
-- **Tabla** (`anticipos-tabla.tsx`) ordenada por semáforo por defecto (atrasados primero, el más antiguo arriba); clic en un encabezado ordena asc → desc → por defecto. Las columnas se reparten el ancho disponible (`table-fixed`, sin scroll horizontal desde 720 px) y se ajustan arrastrando el borde del encabezado o con las flechas; el ancho se guarda en `localStorage` y doble clic lo restablece. Tabla con búsqueda y filtros por seguimiento, falta, observación 1 y tipo de colaborador. Pinta 50 filas y "Mostrar más". El pie muestra el conteo y el valor total de lo filtrado. "Legalizar" al final de cada fila pendiente.
+- **Semáforo** (`src/lib/anticipos/seguimiento.ts`, única fuente de la regla): *Resuelto* (legalizado o con fecha de gestión), *En plazo* (hoy ≤ fecha máxima de legalización) y *Vencido* (pasó la fecha máxima; muestra "Vencido N días"). Ej.: fecha final 1 nov → máxima 9 nov → el 11 nov está vencido 2 días. "Hoy" lo calcula el servidor en hora de Colombia. Lo usan la tabla, los indicadores, el detalle y el Excel.
+- **Indicadores** clicables (filtran la tabla): vencidos, sin resolver (con su valor), devoluciones, legalizados (% del total) y excolaboradores (valor pendiente según el reporte de Contabilidad).
+- **Tabla** (`anticipos-tabla.tsx`) ordenada por semáforo por defecto (vencidos primero, el más antiguo arriba); clic en un encabezado ordena asc → desc → por defecto. Las columnas se reparten el ancho disponible (`table-fixed`, sin scroll horizontal desde 720 px) y se ajustan arrastrando el borde del encabezado o con las flechas; el ancho se guarda en `localStorage` y doble clic lo restablece. Tabla con búsqueda y filtros por seguimiento, falta, observación 1 y tipo de colaborador. Pinta 50 filas y "Mostrar más". El pie muestra el conteo y el valor total de lo filtrado. "Legalizar" al final de cada fila pendiente.
 - **Panel lateral** (`anticipo-sheet.tsx`): al hacer clic en una fila muestra el detalle (datos, observación 2 y el reporte de Contabilidad si es excolaborador) con Legalizar / Editar / Eliminar. *Editar* cambia el mismo panel al formulario; *Nuevo registro* también abre en el panel.
 - **Descargar Excel** con las filas filtradas, en el orden de la tabla.
 - Botón **Importar/Actualizar retirados** (ver [06](06-importacion-retirados.md)).

@@ -19,6 +19,8 @@ function decodificar(ancla: string): string {
  */
 function resolver(url: string, archivoActual: string, mapa: MapaAnclas): string | null {
   if (EXTERNO.test(url)) return url;
+  // Rutas del portal (p. ej. `/admin/suiteql`): la página destino valida el acceso.
+  if (url.startsWith("/")) return url;
   if (url.startsWith("#")) {
     return mapa.get(archivoActual)?.anclas.has(decodificar(url.slice(1))) ? url : null;
   }

@@ -19,6 +19,7 @@ import {
   type AnticipoRow,
 } from "@/lib/anticipos/schema";
 import {
+  fechaMaximaLegalizacion,
   NIVEL_SEGUIMIENTO_LABEL,
   PESO_SEGUIMIENTO,
   type Seguimiento,
@@ -37,6 +38,7 @@ export type ColumnaId =
   | "falta"
   | "observacion"
   | "fecha_rq"
+  | "fecha_max"
   | "fecha_gestion"
   | "accion";
 
@@ -57,13 +59,14 @@ const COLUMNAS: Columna[] = [
   { id: "valor", titulo: "Valor", peso: 10, min: 88, align: "right", ordenable: true },
   { id: "falta", titulo: "Falta", peso: 15, min: 110, ordenable: true },
   { id: "observacion", titulo: "Observación", peso: 16, min: 120, ordenable: true },
-  { id: "fecha_rq", titulo: "Fecha RQ", peso: 9, min: 92, ordenable: true },
+  { id: "fecha_rq", titulo: "Fecha final", peso: 9, min: 92, ordenable: true },
+  { id: "fecha_max", titulo: "Máx. legalización", peso: 9, min: 92, ordenable: true },
   { id: "fecha_gestion", titulo: "Gestión", peso: 9, min: 92, ordenable: true },
   { id: "accion", titulo: "Siguiente paso", peso: 10, min: 56, align: "right", ordenable: false },
 ];
 
 const PESOS_DEFAULT = Object.fromEntries(COLUMNAS.map((c) => [c.id, c.peso])) as Record<ColumnaId, number>;
-const STORAGE_KEY = "toolbox:anticipos:anchos:v3";
+const STORAGE_KEY = "toolbox:anticipos:anchos:v4";
 
 function cargarPesos(): Record<ColumnaId, number> {
   try {
@@ -135,6 +138,8 @@ export function ordenarFilas(
           ) * dir
         );
       case "fecha_rq":
+      case "fecha_max":
+        // La fecha máxima es la final + N días: ordenan igual.
         return a.fecha_rq.localeCompare(b.fecha_rq) * dir;
       case "fecha_gestion":
         return compararNullable(a.fecha_gestion, b.fecha_gestion, (x, y) => x.localeCompare(y), dir);
@@ -395,6 +400,15 @@ const Fila = memo(function Fila({
       </TableCell>
       <TableCell className={cn(celda, "truncate font-mono text-xs tabular-nums text-muted-foreground")}>
         {formatAnticipoFecha(r.fecha_rq)}
+      </TableCell>
+      <TableCell
+        className={cn(
+          celda,
+          "truncate font-mono text-xs tabular-nums",
+          seguimiento.nivel === "revisar" ? "font-semibold text-destructive" : "text-muted-foreground",
+        )}
+      >
+        {formatAnticipoFecha(fechaMaximaLegalizacion(r.fecha_rq))}
       </TableCell>
       <TableCell className={cn(celda, "truncate font-mono text-xs tabular-nums text-muted-foreground")}>
         {formatAnticipoFecha(r.fecha_gestion)}

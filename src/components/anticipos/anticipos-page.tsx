@@ -40,7 +40,7 @@ import {
   type AnticipoRow,
 } from "@/lib/anticipos/schema";
 import {
-  DIAS_ATRASO,
+  DIAS_LEGALIZACION,
   NIVEL_SEGUIMIENTO_LABEL,
   PESO_SEGUIMIENTO,
   seguimientoDe,
@@ -69,7 +69,7 @@ const FILTROS_INICIALES: Filtros = {
   q: "",
 };
 
-/** `pendiente` agrupa atrasados y en plazo: todo lo que aún no se ha resuelto. */
+/** `pendiente` agrupa vencidos y en plazo: todo lo que aún no se ha resuelto. */
 const PENDIENTE = "pendiente";
 
 const SEGUIMIENTO_OPCIONES = [
@@ -240,10 +240,10 @@ export function AnticiposPageClient({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" data-tour="indicadores">
         <Indicador
           icon={<AlertTriangle className="size-4" />}
-          label="Atrasados"
+          label="Vencidos"
           value={indicadores.atrasados}
           tone={indicadores.atrasados > 0 ? "destructive" : "muted"}
-          detalle={`≥ ${DIAS_ATRASO} días sin gestión`}
+          detalle={`Pasaron los ${DIAS_LEGALIZACION} días para legalizar`}
           activo={filtros.seguimiento === "revisar"}
           onClick={() => aplicar({ seguimiento: "revisar" })}
         />

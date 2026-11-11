@@ -8,7 +8,12 @@ import {
   type AnticipoObservacion1,
   type AnticipoRow,
 } from "@/lib/anticipos/schema";
-import { DIAS_ATRASO, NIVEL_SEGUIMIENTO_LABEL, seguimientoDe as seguimientoBase } from "@/lib/anticipos/seguimiento";
+import {
+  DIAS_LEGALIZACION,
+  fechaMaximaLegalizacion,
+  NIVEL_SEGUIMIENTO_LABEL,
+  seguimientoDe as seguimientoBase,
+} from "@/lib/anticipos/seguimiento";
 
 /**
  * Reporte .xlsx de Gestión y Legalización de Anticipos, generado en el
@@ -78,17 +83,18 @@ function tonoObservacion(value: AnticipoObservacion1): Tono {
   return TONOS.neutro;
 }
 
-type Seguimiento = "Resuelto" | "Atrasado" | "En plazo";
+type Seguimiento = "Resuelto" | "Vencido" | "En plazo";
 
 const TONO_SEGUIMIENTO: Record<Seguimiento, Tono> = {
   Resuelto: TONOS.exito,
-  Atrasado: TONOS.peligro,
+  Vencido: TONOS.peligro,
   "En plazo": TONOS.neutro,
 };
 
 function seguimientoDe(r: AnticipoRow, hoy: string): { estado: Seguimiento; dias: number | null } {
   const s = seguimientoBase(r, hoy);
-  return { estado: NIVEL_SEGUIMIENTO_LABEL[s.nivel] as Seguimiento, dias: s.dias };
+  // Solo se reportan días vencidos; en plazo o resuelto queda vacío.
+  return { estado: NIVEL_SEGUIMIENTO_LABEL[s.nivel] as Seguimiento, dias: s.dias !== null && s.dias > 0 ? s.dias : null };
 }
 
 /** Fecha ISO como `Date` UTC: exceljs la escribe sin corrimiento de zona. */
@@ -192,7 +198,7 @@ function escribirResumen(
   const legalizados = rows.filter((r) => r.falta === "legalizado").length;
   const pendientes = total - legalizados;
   const devoluciones = rows.filter((r) => r.falta === "devolucion").length;
-  const atrasados = rows.filter((r) => seguimientoDe(r, hoy).estado === "Atrasado").length;
+  const atrasados = rows.filter((r) => seguimientoDe(r, hoy).estado === "Vencido").length;
   const retirados = rows.filter((r) => r.es_retirado);
   const valorPendienteRetirados = retirados
     .filter((r) => r.falta !== "legalizado")
@@ -257,7 +263,7 @@ function escribirResumen(
   linea("Pendientes", pendientes, { porcentaje: pct(pendientes), tono: TONOS.alerta });
   linea("Devoluciones", devoluciones, { porcentaje: pct(devoluciones), tono: TONOS.peligro });
   linea("Legalizados", legalizados, { porcentaje: pct(legalizados), tono: TONOS.exito });
-  linea(`Atrasados (≥ ${DIAS_ATRASO} días sin gestión)`, atrasados, {
+  linea(`Vencidos (pasaron los ${DIAS_LEGALIZACION} días para legalizar)`, atrasados, {
     porcentaje: pct(atrasados),
     tono: TONOS.peligro,
   });
@@ -302,10 +308,11 @@ const COLUMNAS_DETALLE: ColumnaDetalle[] = [
   { header: "Falta", width: 28, align: "center" },
   { header: "Observación 1", width: 20, align: "center" },
   { header: "Observación 2", width: 42, wrap: true },
-  { header: "Fecha RQ", width: 12, fmt: FMT_FECHA, align: "center" },
+  { header: "Fecha final", width: 12, fmt: FMT_FECHA, align: "center" },
+  { header: "Fecha máx. legalización", width: 14, fmt: FMT_FECHA, align: "center" },
   { header: "Fecha gestión", width: 13, fmt: FMT_FECHA, align: "center" },
   { header: "Seguimiento", width: 13, align: "center" },
-  { header: "Días sin gestión", width: 11, fmt: FMT_ENTERO, align: "center" },
+  { header: "Días vencido", width: 11, fmt: FMT_ENTERO, align: "center" },
   { header: "Excolaborador", width: 13, align: "center" },
   { header: "Cédula", width: 14, fmt: FMT_ENTERO, align: "right" },
   { header: "Valor reportado (Contab.)", width: 16, fmt: FMT_MONEDA, align: "right" },
@@ -317,10 +324,10 @@ const COL = {
   valor: 4,
   falta: 5,
   observacion1: 6,
-  seguimiento: 10,
-  dias: 11,
-  excolaborador: 12,
-  valorRetiro: 14,
+  seguimiento: 11,
+  dias: 12,
+  excolaborador: 13,
+  valorRetiro: 15,
 } as const;
 
 function escribirDetalle(wb: ExcelJS.Workbook, rows: AnticipoRow[], subtitulo: string, hoy: string) {
@@ -359,6 +366,7 @@ function escribirDetalle(wb: ExcelJS.Workbook, rows: AnticipoRow[], subtitulo: s
       ANTICIPOS_OBSERVACION_1_LABELS[r.observacion_1],
       r.observacion_2 ?? "",
       isoADate(r.fecha_rq),
+      isoADate(fechaMaximaLegalizacion(r.fecha_rq)),
       isoADate(r.fecha_gestion),
       seg.estado,
       seg.dias,
@@ -384,7 +392,7 @@ function escribirDetalle(wb: ExcelJS.Workbook, rows: AnticipoRow[], subtitulo: s
     pintarTono(row.getCell(COL.falta), tonoFalta(r.falta));
     pintarTono(row.getCell(COL.observacion1), tonoObservacion(r.observacion_1));
     pintarTono(row.getCell(COL.seguimiento), TONO_SEGUIMIENTO[seg.estado]);
-    if (seg.estado === "Atrasado") {
+    if (seg.estado === "Vencido") {
       row.getCell(COL.dias).font = { size: 10, bold: true, color: { argb: TONOS.peligro.font } };
     }
     if (r.es_retirado) pintarTono(row.getCell(COL.excolaborador), TONOS.neutro);

@@ -99,7 +99,7 @@ export const anticipoCreateSchema = z.object({
       message: "Ingresa un valor numérico en pesos",
     }),
   fecha_rq: z.string().refine(isValidIsoDate, {
-    message: "Fecha de RQ inválida",
+    message: "Fecha final inválida",
   }),
   fecha_gestion: z
     .string()

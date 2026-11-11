@@ -2,7 +2,7 @@ import "server-only";
 
 import { listUsuarios } from "@/lib/admin/users";
 import { CONCILIACION_POR_PAIS, PROCESOS, puede, type Permisos } from "@/lib/auth/permisos-shared";
-import { daysSinceIsoDate } from "@/lib/anticipos/schema";
+import { DIAS_LEGALIZACION, seguimientoDe } from "@/lib/anticipos/seguimiento";
 import { periodoActual, periodoLabel, shiftPeriodo } from "@/lib/comisiones/calculo";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -12,8 +12,8 @@ import { createClient } from "@/lib/supabase/server";
  * por separado: `null` = no se pudo leer; ausente = sin acceso.
  */
 
-/** Días desde la fecha de RQ a partir de los cuales un anticipo cuenta como atrasado (igual que la tabla). */
-export const DIAS_ATRASO = 10;
+/** Días corridos para legalizar después de la fecha final (misma regla que la tabla). */
+export { DIAS_LEGALIZACION };
 
 export interface ResumenAnticipos {
   total: number;
@@ -68,16 +68,15 @@ async function resumenAnticipos(ahora: Date): Promise<ResumenAnticipos> {
     .select("falta, observacion_1, fecha_rq, fecha_gestion");
   if (error) throw new Error(error.message);
   const filas = data ?? [];
+  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, "0")}-${String(ahora.getDate()).padStart(2, "0")}`;
   let pendientes = 0;
   let atrasados = 0;
   let devoluciones = 0;
   for (const r of filas) {
     if (r.falta !== "legalizado") pendientes++;
     if (r.falta === "devolucion") devoluciones++;
-    // Misma regla que la columna "Fecha RQ" de la tabla de anticipos.
-    const resuelto =
-      r.falta === "legalizado" || r.observacion_1 === "legalizado" || r.fecha_gestion !== null;
-    if (!resuelto && r.fecha_rq && daysSinceIsoDate(r.fecha_rq, ahora) >= DIAS_ATRASO) atrasados++;
+    // Misma regla que el semáforo de la tabla: vencido = pasó la fecha máxima de legalización.
+    if (seguimientoDe(r as Parameters<typeof seguimientoDe>[0], hoy).nivel === "revisar") atrasados++;
   }
   return {
     total: filas.length,
