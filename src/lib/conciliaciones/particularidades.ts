@@ -35,9 +35,37 @@ const BANCOS_CON_CONVERSION: Record<string, ConversionConfig> = {
  */
 const PAISES_UNIFICAR_EXCEL = new Set(["MX"]);
 
+export interface DomiciliacionConfig {
+  /** Extensiones de los TXT de domiciliación. */
+  extensiones: readonly string[];
+  /** Máximo de TXT por conciliación (uno por día). */
+  max: number;
+}
+
+export const EXTENSIONES_DOMICILIACION = [".dom", ".txt"] as const;
+
+/**
+ * Bancos que reciben, junto al extracto, los TXT diarios de domiciliación (posiciones
+ * fijas). Se suben por Storage y n8n los lee en la misma conciliación (`domiciliacion_N`).
+ */
+const BANCOS_CON_DOMICILIACION: Record<string, DomiciliacionConfig> = {
+  "MX:banamex-681-mexico": { extensiones: EXTENSIONES_DOMICILIACION, max: 31 },
+};
+
+export function getDomiciliacion(pais: string, slug: string): DomiciliacionConfig | null {
+  return BANCOS_CON_DOMICILIACION[`${pais}:${slug}`] ?? null;
+}
+
+export function esArchivoDomiciliacion(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return EXTENSIONES_DOMICILIACION.some((ext) => lower.endsWith(ext));
+}
+
 export function getConversion(pais: string, slug: string): ConversionConfig | null {
   const propia = BANCOS_CON_CONVERSION[`${pais}:${slug}`];
   if (propia) return propia;
+  // El extracto de estos bancos es el reporte Kyriba del mes: no hay diarios que unificar.
+  if (getDomiciliacion(pais, slug)) return null;
   if (PAISES_UNIFICAR_EXCEL.has(pais)) {
     return {
       formato: "excel",

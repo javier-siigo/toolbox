@@ -4,6 +4,7 @@ import { serverEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PeriodoVigente } from "./periodo";
 import { appendPeriodo } from "./periodo";
+import { esArchivoDomiciliacion } from "./particularidades";
 import { ACCEPTED_EXTENSIONS, ACCEPTED_MIME_PREFIXES, MAX_FILE_SIZE_BYTES } from "@/lib/uploads";
 
 export const BUCKET = "conciliaciones-uploads";
@@ -108,9 +109,27 @@ interface DownloadResult {
   meta: { storagePath: string; originalName: string };
 }
 
+/** TXT de domiciliación: mismo límite de tamaño, solo .dom / .txt. */
+function validateDomiciliacionMeta(filename: string, size: number): void {
+  if (size <= 0) {
+    throw new ConciliacionError(`El TXT ${filename} está vacío.`, "missing_file", 400);
+  }
+  if (size > MAX_FILE_SIZE_BYTES) {
+    throw new ConciliacionError(`El TXT ${filename} supera el límite de 10 MB.`, "file_too_large", 413);
+  }
+  if (!esArchivoDomiciliacion(filename)) {
+    throw new ConciliacionError(
+      `${filename} no es un TXT de domiciliación (.dom o .txt).`,
+      "invalid_type",
+      415,
+    );
+  }
+}
+
 async function downloadFromStorage(
   storagePath: string,
   originalName: string,
+  validar: (filename: string, size: number, contentType: string) => void = validateFileMeta,
 ): Promise<DownloadResult> {
   const admin = createAdminClient();
   const result = await admin.storage.from(BUCKET).download(storagePath);
@@ -129,7 +148,7 @@ async function downloadFromStorage(
   if (blob.size === 0) {
     throw new ConciliacionError("El archivo subido está vacío.", "missing_file", 400);
   }
-  validateFileMeta(originalName, blob.size, blob.type);
+  validar(originalName, blob.size, blob.type);
   const filename = buildStorageFilename(originalName);
   const file = new File([blob], filename, { type: blob.type });
   return { file, meta: { storagePath, originalName } };
@@ -143,6 +162,8 @@ export interface ConciliarArgs {
   periodo: PeriodoVigente;
   principal: InputFile;
   previo?: InputFile;
+  /** TXT diarios de domiciliación (solo bancos con `getDomiciliacion`). */
+  domiciliacion?: InputFile[];
   /** Dueño del trabajo: el resultado queda bajo su carpeta. */
   userId: string;
   jobId: string;
@@ -181,6 +202,12 @@ export async function iniciarConciliacion(args: ConciliarArgs): Promise<void> {
   const previoFile = args.previo
     ? await downloadFromStorage(args.previo.storagePath, args.previo.originalName)
     : null;
+  const domiciliacionFiles = [];
+  for (const d of args.domiciliacion ?? []) {
+    domiciliacionFiles.push(
+      await downloadFromStorage(d.storagePath, d.originalName, validateDomiciliacionMeta),
+    );
+  }
 
   const formData = new FormData();
   formData.append("pais", args.pais);
@@ -191,6 +218,10 @@ export async function iniciarConciliacion(args: ConciliarArgs): Promise<void> {
   if (previoFile) {
     formData.append("previous", previoFile.file, previoFile.file.name);
   }
+  // n8n (Classify Files) los toma por la regla `domiciliacion` de bank_registry.archivos.
+  domiciliacionFiles.forEach((d, i) => {
+    formData.append(`domiciliacion_${i}`, d.file, d.file.name);
+  });
   const rutas = rutasResultado(args.userId, args.jobId);
   formData.append("resultUploadUrl", await urlSubidaFirmada(rutas.excel));
   formData.append("statusUploadUrl", await urlSubidaFirmada(rutas.estado));

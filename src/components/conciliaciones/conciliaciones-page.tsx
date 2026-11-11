@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { toast } from "sonner";
 
 import { BankCombobox } from "./bank-combobox";
+import { DomiciliacionRow } from "./domiciliacion-row";
 import { DualUploadCard } from "./dual-upload-card";
 import { PeriodoBanco } from "./periodo-banco";
 import { tourConciliaciones } from "./tour";
@@ -18,14 +19,21 @@ import {
   MAX_TXT_FILES,
   MAX_TXT_TOTAL_BYTES,
   MAX_TXT_TOTAL_LABEL,
+  EXTENSIONES_DOMICILIACION,
   esArchivoDeConversion,
+  esArchivoDomiciliacion,
   getConversion,
+  getDomiciliacion,
   mensajeFormatoInvalido,
   parseArchivosConError,
   requiereConversion,
   type ArchivoTxtConError,
 } from "@/lib/conciliaciones/particularidades";
-import { PREVIO_INVALID_TYPE_MESSAGE, isXlsxFilename } from "@/lib/uploads";
+import {
+  MAX_FILE_SIZE_BYTES,
+  PREVIO_INVALID_TYPE_MESSAGE,
+  isXlsxFilename,
+} from "@/lib/uploads";
 import type {
   BancoConciliacion,
   ConciliacionRun,
@@ -111,7 +119,7 @@ interface UploadResult {
 
 interface UploadArgs {
   file: File;
-  kind: "principal" | "previo";
+  kind: "principal" | "previo" | "domiciliacion";
 }
 
 interface ConciliacionesPageClientProps {
@@ -139,6 +147,7 @@ export function ConciliacionesPageClient({
   const [previoFile, setPrevioFile] = React.useState<File | null>(null);
   const [currentRun, setCurrentRun] = React.useState<ConciliacionRun | null>(null);
   const [txtFiles, setTxtFiles] = React.useState<File[]>([]);
+  const [domiFiles, setDomiFiles] = React.useState<File[]>([]);
   const [txtConversion, setTxtConversion] = React.useState<TxtConversion>({
     status: "idle",
   });
@@ -195,9 +204,33 @@ export function ConciliacionesPageClient({
     abortRef.current?.abort();
     abortRef.current = null;
     resetTxt();
+    setDomiFiles([]);
     setBanco(null);
     setCurrentRun(null);
   }, [resetTxt]);
+
+  const handleSelectDomi = React.useCallback(
+    (files: File[]) => {
+      const config = banco ? getDomiciliacion(pais, banco.slug) : null;
+      if (!config) return;
+      const invalido = files.find((f) => !esArchivoDomiciliacion(f.name));
+      if (invalido) {
+        toast.error(`${invalido.name} no es un TXT de domiciliación (.dom o .txt).`);
+        return;
+      }
+      const grande = files.find((f) => f.size > MAX_FILE_SIZE_BYTES);
+      if (grande) {
+        toast.error(`${grande.name} supera el límite de 10 MB.`);
+        return;
+      }
+      if (files.length > config.max) {
+        toast.error(`Puedes subir hasta ${config.max} TXT de domiciliación a la vez.`);
+        return;
+      }
+      setDomiFiles(files);
+    },
+    [banco, pais],
+  );
 
   const convertTxt = React.useCallback(
     async (bancoSel: BancoConciliacion, files: File[]) => {
@@ -369,7 +402,12 @@ export function ConciliacionesPageClient({
   }
 
   const runConciliacion = React.useCallback(
-    async (bancoSel: BancoConciliacion, principal: File, previo: File | null) => {
+    async (
+      bancoSel: BancoConciliacion,
+      principal: File,
+      previo: File | null,
+      domi: File[] = [],
+    ) => {
       const id = createRunId();
       const baseRun: ConciliacionRun = {
         id,
@@ -414,6 +452,11 @@ export function ConciliacionesPageClient({
         if (previo) {
           previoUpload = await uploadOne({ file: previo, kind: "previo" }, signal);
         }
+        const domiUploads: { storagePath: string; originalName: string }[] = [];
+        for (const file of domi) {
+          const up = await uploadOne({ file, kind: "domiciliacion" }, signal);
+          domiUploads.push({ storagePath: up.path, originalName: file.name });
+        }
 
         setCurrentRun({ ...baseRun, status: "processing" });
 
@@ -428,6 +471,7 @@ export function ConciliacionesPageClient({
             originalNamePrincipal: principal.name,
             storagePathPrevio: previoUpload?.path,
             originalNamePrevio: previo?.name,
+            ...(domiUploads.length > 0 ? { domiciliacion: domiUploads } : {}),
           }),
           signal,
         });
@@ -528,8 +572,9 @@ export function ConciliacionesPageClient({
       toast.error(PREVIO_INVALID_TYPE_MESSAGE);
       return;
     }
-    void runConciliacion(banco, principalFile, previoFile);
-  }, [banco, principalFile, previoFile, runConciliacion]);
+    const domi = getDomiciliacion(pais, banco.slug) ? domiFiles : [];
+    void runConciliacion(banco, principalFile, previoFile, domi);
+  }, [banco, principalFile, previoFile, domiFiles, pais, runConciliacion]);
 
   const triggerDownload = React.useCallback((run: ConciliacionRun) => {
     const blob = run.resultBlob;
@@ -552,6 +597,7 @@ export function ConciliacionesPageClient({
   const isConvertingTxt = txtConversion.status === "processing";
   const canSubmit = !soloLectura && !!banco && !!principalFile && !isBusy && !isConvertingTxt;
   const conversion = banco ? getConversion(pais, banco.slug) : null;
+  const domiciliacion = banco ? getDomiciliacion(pais, banco.slug) : null;
   const conTxt = conversion !== null;
 
   const idleFileStatus: ConciliacionRunStatus = "idle";
@@ -566,8 +612,12 @@ export function ConciliacionesPageClient({
       : (currentRun?.status ?? idleFileStatus);
 
   const tour = React.useMemo(
-    () => tourConciliaciones(PAIS_LABEL[pais], { conversion: conversion?.formato }),
-    [pais, conversion?.formato],
+    () =>
+      tourConciliaciones(PAIS_LABEL[pais], {
+        conversion: conversion?.formato,
+        domiciliacion: domiciliacion !== null,
+      }),
+    [pais, conversion?.formato, domiciliacion],
   );
 
   return (
@@ -659,7 +709,17 @@ export function ConciliacionesPageClient({
         onRemovePrevio={handleRemovePrevio}
         disabled={isBusy || isConvertingTxt}
         extra={
-          conversion && (
+          domiciliacion ? (
+            <DomiciliacionRow
+              files={domiFiles}
+              accept={EXTENSIONES_DOMICILIACION.join(",")}
+              max={domiciliacion.max}
+              onSelect={handleSelectDomi}
+              onRemove={() => setDomiFiles([])}
+              disabled={isBusy}
+            />
+          ) : (
+            conversion && (
             <TxtConvertRow
               formato={conversion.formato}
               accept={acceptDeConversion(conversion)}
@@ -675,6 +735,7 @@ export function ConciliacionesPageClient({
               onUsarComoExtracto={handleUsarTxtComoExtracto}
               disabled={isBusy}
             />
+            )
           )
         }
       />

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { BUCKET } from "@/lib/conciliaciones/conciliar";
+import { esArchivoDomiciliacion } from "@/lib/conciliaciones/particularidades";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
 import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -13,7 +14,8 @@ import {
 } from "@/lib/uploads";
 
 const URL_TTL_SECONDS = 60 * 5;
-const ALLOWED_KINDS = ["principal", "previo"] as const;
+// domiciliacion: TXT diarios de domiciliación (Banamex 681) que viajan junto al extracto.
+const ALLOWED_KINDS = ["principal", "previo", "domiciliacion"] as const;
 type UploadKind = (typeof ALLOWED_KINDS)[number];
 
 function jsonError(message: string, code: string, status: number) {
@@ -83,7 +85,11 @@ export async function POST(request: Request) {
   const extension = filename.split(".").pop()?.toLowerCase() ?? "";
   const mimeOk = ACCEPTED_MIME_PREFIXES.some((p) => contentType.startsWith(p));
   const extOk = (ACCEPTED_EXTENSIONS as readonly string[]).includes(extension);
-  if (!mimeOk && !extOk) {
+  if (kind === "domiciliacion") {
+    if (!esArchivoDomiciliacion(filename)) {
+      return jsonError("El TXT de domiciliación debe ser .dom o .txt.", "invalid_type", 415);
+    }
+  } else if (!mimeOk && !extOk) {
     return jsonError(
       "Tipo de archivo no soportado. Usa .xlsx, .xls o .csv.",
       "invalid_type",

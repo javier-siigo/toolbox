@@ -3,10 +3,19 @@ import type { TourStep } from "@/components/tour/como-usar";
 /** Recorrido "¿Cómo usar?" de la conciliación bancaria de un país. */
 export function tourConciliaciones(
   pais: string,
-  opts: { conversion?: "txt" | "excel" } = {},
+  opts: { conversion?: "txt" | "excel"; domiciliacion?: boolean } = {},
 ): TourStep[] {
-  const pasoTxt: TourStep[] =
-    opts.conversion === "txt"
+  const pasoTxt: TourStep[] = opts.domiciliacion
+    ? [
+        {
+          target: "txt",
+          title: "TXT de domiciliación (opcional)",
+          description:
+            "Agrega los TXT diarios de domiciliación (.dom o .txt) tal como los entrega el banco, sin pasarlos por el Excel de fórmulas. Se leen por posiciones y se concilian en la misma corrida que el extracto, cada cobro contra su venta en NetSuite por el número de pedido.",
+          side: "bottom",
+        },
+      ]
+    : opts.conversion === "txt"
       ? [
           {
             target: "txt",

@@ -8,6 +8,7 @@ import {
   safeUserId,
 } from "@/lib/conciliaciones/conciliar";
 import { getBancoPorSlug } from "@/lib/conciliaciones/bancos";
+import { esArchivoDomiciliacion, getDomiciliacion } from "@/lib/conciliaciones/particularidades";
 import { hoyEnPais, periodoVigente } from "@/lib/conciliaciones/periodo";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
 import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
@@ -38,8 +39,16 @@ export async function POST(request: Request) {
     return jsonError("Cuerpo inválido: se esperaba un objeto", "bad_request", 400);
   }
 
-  const { pais, banco, bancoNombre, storagePathPrincipal, originalNamePrincipal, storagePathPrevio, originalNamePrevio } =
-    body;
+  const {
+    pais,
+    banco,
+    bancoNombre,
+    storagePathPrincipal,
+    originalNamePrincipal,
+    storagePathPrevio,
+    originalNamePrevio,
+    domiciliacion,
+  } = body;
 
   if (typeof pais !== "string" || pais.length === 0) {
     return jsonError("Falta el país", "bad_request", 400);
@@ -83,6 +92,43 @@ export async function POST(request: Request) {
     return jsonError(PREVIO_INVALID_TYPE_MESSAGE, "invalid_type", 415);
   }
 
+  // TXT de domiciliación (opcional, solo bancos configurados): [{ storagePath, originalName }]
+  const domiciliacionFiles: { storagePath: string; originalName: string }[] = [];
+  if (domiciliacion !== undefined && domiciliacion !== null) {
+    const config = getDomiciliacion(pais, banco);
+    if (!config) {
+      return jsonError("Este banco no recibe TXT de domiciliación.", "bad_request", 400);
+    }
+    if (!Array.isArray(domiciliacion) || domiciliacion.length > config.max) {
+      return jsonError(
+        `Puedes enviar hasta ${config.max} TXT de domiciliación.`,
+        "bad_request",
+        400,
+      );
+    }
+    for (const d of domiciliacion) {
+      if (
+        !isPlainObject(d) ||
+        typeof d.storagePath !== "string" ||
+        typeof d.originalName !== "string" ||
+        !d.originalName
+      ) {
+        return jsonError("TXT de domiciliación inválido.", "bad_request", 400);
+      }
+      if (!isValidStoragePath(d.storagePath, userId, "domiciliacion")) {
+        return jsonError("No tienes acceso a este archivo.", "storage_unauthorized", 403);
+      }
+      if (!esArchivoDomiciliacion(d.originalName)) {
+        return jsonError(
+          `${d.originalName} no es un TXT de domiciliación (.dom o .txt).`,
+          "invalid_type",
+          415,
+        );
+      }
+      domiciliacionFiles.push({ storagePath: d.storagePath, originalName: d.originalName });
+    }
+  }
+
   const bancoRow = await getBancoPorSlug(pais, banco);
   if (!bancoRow) {
     return jsonError(
@@ -92,7 +138,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const pathsToCleanup = [principalPath];
+  const pathsToCleanup = [principalPath, ...domiciliacionFiles.map((d) => d.storagePath)];
   if (previoPath) {
     pathsToCleanup.push(previoPath);
   }
@@ -122,6 +168,7 @@ export async function POST(request: Request) {
               originalName: originalNamePrevio as string,
             }
           : undefined,
+      domiciliacion: domiciliacionFiles,
     });
 
     // n8n ya tiene los archivos: los de entrada se pueden borrar.
@@ -201,7 +248,7 @@ export async function GET(request: Request) {
 function isValidStoragePath(
   path: string,
   userId: string,
-  kind: "principal" | "previo",
+  kind: "principal" | "previo" | "domiciliacion",
 ): boolean {
   const safe = safeUserId(userId);
   const prefix = `${safe}/${kind}/`;

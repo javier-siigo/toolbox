@@ -183,6 +183,40 @@ Slug `banamex-387-mexico`. El banco entrega un reporte por día en `.csv` separa
 - **Campos del banco:** fecha = `FECHA DE CORTE` (`AAMMDD`, 261107 → 07/11/2026), importe = `IMPORTE` (crédito), autorización = `AUTORIZACION` (va en *Descripcion*), llave = `IDENTIFICACION`.
 - **Cruce:** `IDENTIFICACION` = número de pedido, que en NetSuite está en `custbody_pedido` (y `externalid`) de la *Venta de Contado* (CashSale). Se compara solo con dígitos y sin ceros a la izquierda. NetSuite se consulta con el mismo esquema que los demás adapters (todas las transacciones contabilizadas en la cuenta).
 
+### Banamex 681 (México · extracto Kyriba + TXT de domiciliación)
+
+Slug `banamex-681-mexico`. Una sola conciliación con dos fases: el **extracto** (archivo principal: reporte Kyriba, hoja `Maestra`, cuenta `BNM MXN 681`) y, opcional, los **TXT diarios de domiciliación** (`.dom` / `.txt`, hasta 31). Este banco no usa la unificación de Excel de México.
+
+- **Adapter n8n:** `Adapter | Banamex 681 MX` (Contabilidad / Mexico), en `bank_registry` con `cuentas = BNMMXN681`, `cuenta_netsuite = 11130103` (BANAMEX 8681 $) y `archivos` con la regla `domiciliacion` (`camposRegex ^domiciliacion_\d+$`, `multiple`, `opcional`).
+- **Orquestador:** *Classify Files* acepta reglas `multiple: true` (todos los binarios que coinciden pasan como `rol_0`, `rol_1`, …) y `camposRegex`. Sin `archivos` configurados no cambia nada.
+- **App:** en Banamex 681 aparece la fila "¿Tienes los TXT de domiciliación? Agregar TXT" (`DomiciliacionRow`). Se suben por Storage (`upload-url` con `kind = domiciliacion`) y `POST /api/conciliaciones/conciliar` los recibe en `domiciliacion: [{ storagePath, originalName }]`; n8n los recibe como `domiciliacion_0..n`. Config en `BANCOS_CON_DOMICILIACION` (`particularidades.ts`).
+
+**Fase 1 — extracto (no se usa Flow Id).** `Referencia` = `<texto libre>; <16 dígitos>`. Los 16 dígitos son prefijo (8) + folio (8): prefijo `00000859` (orden de abono / SPEI) o `NN` + `AAMMDD` de la fecha (depósito). Llave = `FOLIO` + folio sin ceros a la izquierda, que es el **memo** del Pago / Depósito de cliente en NetSuite (`0000085900685571` → `685571`). Si el prefijo no valida, el movimiento queda sin llave. Las liquidaciones `ABONO LIQ DOMI …` y los `DEVOL/REVERSO` de domiciliación no tienen un registro NetSuite propio: quedan visibles con una llave descriptiva (`LIQ DOMI TARJ BNM ARCH01 20261104`) que no cruza.
+
+**Fase 2 — TXT de domiciliación.** Reemplaza el Excel *Domi fórmulas* (hoja `Domi`, sin títulos de columna). Registros de detalle tipo `02` de 400 caracteres; posiciones base 1 tomadas de sus fórmulas:
+
+| Campo | Fórmula del Excel | Lectura en el adapter |
+|---|---|---|
+| Codigo Respuesta | `MID(A,275,5)` | `00` = cobrado; otro = rechazado (registro tipo `31`), sale *No aplica* |
+| Cuenta Cliente | `MID(A,78,18)` | CLABE / cuenta (= `custbody_referencia` en NetSuite) |
+| Importe | `MID(A,22,7)` → 5 enteros + 2 decimales | `MID(A,14,15) / 100`: mismo valor mientras sea < 100,000; la fórmula se rompe por encima |
+| Pedido | `MID(A,148,8)` | **llave**: `PEDIDO` + pedido = `custbody_pedido` de la Venta de Contado |
+| Plaza | `MID(C,4,3)` | dígitos 4–6 de la cuenta |
+| Nombre | `MID(A,176,39)` | |
+| Fecha | `MID(A,29,8)` | `AAAAMMDD` |
+
+La columna J del Excel es un consecutivo tecleado (no fórmula) y no se usa. Control: la suma de los importes debe ser el total del registro final `09`; si no cuadra, la conciliación falla con el detalle. Con el TXT del 10/11/2026: 40 registros, 144,356.20 (= registro final), 38 cobrados → 38 Ventas de Contado conciliadas; los 2 rechazados no tienen venta en NetSuite.
+
+### Inbursa 103 (México · cruce por 2 llaves)
+
+Slug `inbursa-103-mexico`. Excel *Estado de Cuenta Individual* con la línea `Cuenta: 036180120145500103` y el encabezado `Fecha | Referencia | Ref. Externa | Referencia Leyenda | Ref. Numerica | Movimiento | Cargo | Abono | Saldo | Ordenante | Clave de Rastreo`. Usa la unificación de Excel de México como el resto.
+
+- **Adapter n8n:** `Adapter | Inbursa 103 MX` (carpeta Contabilidad / Mexico), registrado en `bank_registry` con `cuentas = 036180120145500103` y `cuenta_netsuite = 11130101` (INBURSA 500103 $).
+- **Campos (marcados por la contadora):** `Fecha`, `Referencia`, `Ref. Externa`, `Referencia Leyenda`, `Cargo`, `Abono`, `Ordenante`, `Clave de Rastreo` (los de referencia van en *Descripcion*). Se descartan *SALDO INICIAL* y *Totales*.
+- **Sentido:** `Cargo` = salida (Débito, monto negativo); `Abono` = entrada (Crédito, positivo).
+- **Llaves:** `Referencia` y `Ref. Externa` (columnas resaltadas). En NetSuite la referencia aparece **dentro del memo** (Pago de factura, Diario), no idéntica: `E 10087025 SP15270` ↔ memo `E 10087025`; `Eva 5741` ↔ `DEVOLUCIÓN EVA-5741 …`.
+- **Cruce (en el *Normalize* del adapter):** primero `Referencia`; si no cruza, `Ref. Externa`. Coincidencia exacta, llave contenida en el memo (≥ 5 caracteres con dígitos) o memo como inicio de la llave, con el mismo sentido y monto. Lo que siga sin cruzar se intenta solo por coincidencia exacta aunque el monto difiera (sale *Diferencia de monto*). Una palabra sin dígitos (p. ej. `Devolucion`) no cuenta como llave. Al cruzar, el movimiento y el registro NetSuite reciben la misma llave; *Merge Results* del orquestador no cambia.
+
 ## Errores
 
 | Código | HTTP | Mensaje al usuario |
