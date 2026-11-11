@@ -8,11 +8,25 @@ export interface ConversionConfig {
   formato: FormatoConversion;
   /** Nombre con el que el Excel consolidado se envía a la conciliación. */
   extractoFilename: string;
+  /** Extensiones admitidas para los archivos diarios. */
+  extensiones: readonly string[];
 }
+
+const EXTENSIONES_EXCEL = [".xlsx", ".xls"] as const;
 
 /** Bancos con una conversión propia (clave `PAIS:slug`). */
 const BANCOS_CON_CONVERSION: Record<string, ConversionConfig> = {
-  "MX:bananorte-mexico": { formato: "txt", extractoFilename: "banorte_extracto.xlsx" },
+  "MX:bananorte-mexico": {
+    formato: "txt",
+    extractoFilename: "banorte_extracto.xlsx",
+    extensiones: [".txt"],
+  },
+  // Pagos referenciados: un reporte diario en .csv (separado por `;`) o Excel.
+  "MX:banamex-387-mexico": {
+    formato: "excel",
+    extractoFilename: "banamex-387-mexico_extracto.xlsx",
+    extensiones: [...EXTENSIONES_EXCEL, ".csv"],
+  },
 };
 
 /**
@@ -25,7 +39,11 @@ export function getConversion(pais: string, slug: string): ConversionConfig | nu
   const propia = BANCOS_CON_CONVERSION[`${pais}:${slug}`];
   if (propia) return propia;
   if (PAISES_UNIFICAR_EXCEL.has(pais)) {
-    return { formato: "excel", extractoFilename: `${slug}_extracto.xlsx` };
+    return {
+      formato: "excel",
+      extractoFilename: `${slug}_extracto.xlsx`,
+      extensiones: EXTENSIONES_EXCEL,
+    };
   }
   return null;
 }
@@ -39,31 +57,28 @@ export const MAX_TXT_TOTAL_BYTES = 4 * 1024 * 1024;
 export const MAX_TXT_TOTAL_LABEL = "4 MB";
 export const MAX_TXT_FILES = 31;
 
-const EXTENSIONES: Record<FormatoConversion, readonly string[]> = {
-  txt: [".txt"],
-  excel: [".xlsx", ".xls"],
-};
-
 export const FORMATO_LABEL: Record<FormatoConversion, string> = {
   txt: "TXT",
   excel: "Excel",
 };
 
 /** Valor para el `accept` del input de archivos. */
-export function acceptDeFormato(formato: FormatoConversion): string {
-  return formato === "txt" ? ".txt,text/plain" : EXTENSIONES.excel.join(",");
+export function acceptDeConversion(config: ConversionConfig): string {
+  return config.formato === "txt" ? ".txt,text/plain" : config.extensiones.join(",");
 }
 
-export function esArchivoDeFormato(filename: string, formato: FormatoConversion): boolean {
+export function esArchivoDeConversion(filename: string, config: ConversionConfig): boolean {
   const lower = filename.toLowerCase();
-  return EXTENSIONES[formato].some((ext) => lower.endsWith(ext));
+  return config.extensiones.some((ext) => lower.endsWith(ext));
 }
 
 /** Mensaje cuando un archivo no corresponde al formato esperado. */
-export function mensajeFormatoInvalido(filename: string, formato: FormatoConversion): string {
-  return formato === "txt"
-    ? `${filename} no es un archivo .txt.`
-    : `${filename} no es un archivo Excel (.xlsx o .xls).`;
+export function mensajeFormatoInvalido(filename: string, config: ConversionConfig): string {
+  if (config.formato === "txt") return `${filename} no es un archivo .txt.`;
+  const lista = config.extensiones.join(", ");
+  return config.extensiones.includes(".csv")
+    ? `${filename} no es un archivo Excel o CSV (${lista}).`
+    : `${filename} no es un archivo Excel (${lista}).`;
 }
 
 export interface ArchivoTxtConError {

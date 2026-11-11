@@ -14,10 +14,11 @@ import { Button } from "@/components/ui/button";
 import { SoloLectura } from "@/components/common/solo-lectura";
 import {
   FORMATO_LABEL,
+  acceptDeConversion,
   MAX_TXT_FILES,
   MAX_TXT_TOTAL_BYTES,
   MAX_TXT_TOTAL_LABEL,
-  esArchivoDeFormato,
+  esArchivoDeConversion,
   getConversion,
   mensajeFormatoInvalido,
   parseArchivosConError,
@@ -278,9 +279,9 @@ export function ConciliacionesPageClient({
       if (!banco) return;
       const config = getConversion(pais, banco.slug);
       if (!config) return;
-      const invalido = files.find((f) => !esArchivoDeFormato(f.name, config.formato));
+      const invalido = files.find((f) => !esArchivoDeConversion(f.name, config));
       if (invalido) {
-        toast.error(mensajeFormatoInvalido(invalido.name, config.formato));
+        toast.error(mensajeFormatoInvalido(invalido.name, config));
         return;
       }
       if (files.length > MAX_TXT_FILES) {
@@ -661,6 +662,7 @@ export function ConciliacionesPageClient({
           conversion && (
             <TxtConvertRow
               formato={conversion.formato}
+              accept={acceptDeConversion(conversion)}
               txtFiles={txtFiles}
               conversion={txtConversion}
               enUsoComoExtracto={

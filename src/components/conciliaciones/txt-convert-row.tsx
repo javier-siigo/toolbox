@@ -6,7 +6,6 @@ import { Check, Download, FileText, Loader2, RotateCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   FORMATO_LABEL,
-  acceptDeFormato,
   type ArchivoTxtConError,
   type FormatoConversion,
 } from "@/lib/conciliaciones/particularidades";
@@ -32,6 +31,8 @@ export interface TxtConversion {
 
 interface TxtConvertRowProps {
   formato: FormatoConversion;
+  /** Valor del `accept` del input (extensiones admitidas por el banco). */
+  accept: string;
   txtFiles: File[];
   conversion: TxtConversion;
   /** El Excel convertido sigue siendo el extracto seleccionado. */
@@ -53,6 +54,7 @@ function archivosLabel(n: number, formato: FormatoConversion): string {
 /** Paso 1 opcional y discreto: consolida varios archivos del banco en un solo Excel. */
 export function TxtConvertRow({
   formato,
+  accept,
   txtFiles,
   conversion,
   enUsoComoExtracto,
@@ -97,7 +99,7 @@ export function TxtConvertRow({
       <input
         ref={inputRef}
         type="file"
-        accept={acceptDeFormato(formato)}
+        accept={accept}
         multiple
         className="sr-only"
         onChange={onChange}

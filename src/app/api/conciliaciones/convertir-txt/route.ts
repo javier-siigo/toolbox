@@ -10,7 +10,7 @@ import {
   MAX_TXT_FILES,
   MAX_TXT_TOTAL_BYTES,
   MAX_TXT_TOTAL_LABEL,
-  esArchivoDeFormato,
+  esArchivoDeConversion,
   getConversion,
   mensajeFormatoInvalido,
 } from "@/lib/conciliaciones/particularidades";
@@ -71,9 +71,9 @@ export async function POST(request: Request) {
       400,
     );
   }
-  const invalido = files.find((f) => !esArchivoDeFormato(f.name, config.formato));
+  const invalido = files.find((f) => !esArchivoDeConversion(f.name, config));
   if (invalido) {
-    return jsonError(mensajeFormatoInvalido(invalido.name, config.formato), "invalid_type", 415);
+    return jsonError(mensajeFormatoInvalido(invalido.name, config), "invalid_type", 415);
   }
   if (files.reduce((sum, f) => sum + f.size, 0) > MAX_TXT_TOTAL_BYTES) {
     return jsonError(

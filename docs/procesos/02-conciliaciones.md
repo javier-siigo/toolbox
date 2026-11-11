@@ -172,7 +172,16 @@ Los demás bancos de México entregan un reporte por día. Con cualquier banco `
 1. **Paso 1 — unificación.** Misma ruta `POST /api/conciliaciones/convertir-txt` y mismos límites (31 archivos, 4 MB en total). Se reenvía a `/webhook/unificar-extractos` como `file_0`, `file_1`, … con `pais` y `banco`; se espera la misma respuesta (`.xlsx` + headers `X-*`, o JSON `{ error, archivosConError[] }`). El Excel unificado se carga como extracto con el nombre `<slug>_extracto.xlsx`.
 2. **Paso 2 — conciliación.** Igual que arriba, con el Excel unificado.
 
-La regla por país está en `PAISES_UNIFICAR_EXCEL` (`particularidades.ts`) y la URL en `WEBHOOKS_UNIFICAR_EXCEL` (`convertir-txt.ts`). Un banco con conversión propia en `BANCOS_CON_CONVERSION` tiene prioridad.
+La regla por país está en `PAISES_UNIFICAR_EXCEL` (`particularidades.ts`) y la URL en `WEBHOOKS_UNIFICAR_EXCEL` (`convertir-txt.ts`). Un banco con conversión propia en `BANCOS_CON_CONVERSION` tiene prioridad. Las extensiones admitidas salen de `ConversionConfig.extensiones`.
+
+### Banamex 387 (México · pagos referenciados)
+
+Slug `banamex-387-mexico`. El banco entrega un reporte por día en `.csv` separado por `;` (o Excel) con `NUMERO; FECHA DE CORTE; LIMITE DE PAGO; REFERENCIA 1; REFERENCIA 2; TIPO DE PAGO; SUCURSAL; CAJA; IMPORTE; AUTORIZACION; IDENTIFICACION`.
+
+- **Unificación:** mismo paso 1 que el resto de México, pero acepta también `.csv` (`BANCOS_CON_CONVERSION["MX:banamex-387-mexico"]`). En n8n, *Util | Unificar extractos Excel* acepta `.csv`; *Extract from File* detecta el separador.
+- **Adapter n8n:** `Adapter | Banamex 387 MX` (carpeta Contabilidad / Mexico), registrado en `bank_registry` con `cuentas = 1387` y `cuenta_netsuite = 11130105` (BANAMEX 1387 $). El archivo no trae número de cuenta: el adapter usa el del registro.
+- **Campos del banco:** fecha = `FECHA DE CORTE` (`AAMMDD`, 261107 → 07/11/2026), importe = `IMPORTE` (crédito), autorización = `AUTORIZACION` (va en *Descripcion*), llave = `IDENTIFICACION`.
+- **Cruce:** `IDENTIFICACION` = número de pedido, que en NetSuite está en `custbody_pedido` (y `externalid`) de la *Venta de Contado* (CashSale). Se compara solo con dígitos y sin ceros a la izquierda. NetSuite se consulta con el mismo esquema que los demás adapters (todas las transacciones contabilizadas en la cuenta).
 
 ## Errores
 
