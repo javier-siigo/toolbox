@@ -15,6 +15,7 @@ import {
   MAX_BALANCE_BYTES,
   MAX_BALANCE_LABEL,
   type FuenteAsientos,
+  type LecturaCliente,
   type ResumenAsientos,
   type Subsidiaria,
 } from "./asientos-shared";
@@ -55,7 +56,7 @@ export function validarArchivoAsientos(kind: KindAsientos, nombre: string, size:
       throw new ConciliacionError("Los asientos deben ser .xlsx o .csv.", "invalid_type", 415);
     if (size > MAX_ASIENTOS_BYTES)
       throw new ConciliacionError(
-        `El archivo de asientos supera ${MAX_ASIENTOS_LABEL}. Para un mes completo usa la consulta automática a NetSuite.`,
+        `El resumen de asientos supera ${MAX_ASIENTOS_LABEL}.`,
         "file_too_large",
         413,
       );
@@ -86,6 +87,8 @@ export interface IniciarAsientosArgs {
   subsidiaria: Subsidiaria | null;
   balance: { storagePath: string; originalName: string };
   asientos?: { storagePath: string; originalName: string };
+  /** Lo que leyó el navegador al resumir el archivo (hojas, líneas, omitidas). */
+  lecturaCliente?: LecturaCliente;
 }
 
 async function existeConTamano(path: string): Promise<number> {
@@ -138,6 +141,7 @@ export async function iniciarConciliacionAsientos(args: IniciarAsientosArgs): Pr
     ...(args.asientos
       ? { asientosUrl: await firmarDescarga(args.asientos.storagePath), asientosNombre: args.asientos.originalName }
       : {}),
+    ...(args.lecturaCliente ? { lecturaCliente: args.lecturaCliente } : {}),
     resultUploadUrl: await firmarSubida(rutas.excel),
     statusUploadUrl: await firmarSubida(rutas.estado),
   };

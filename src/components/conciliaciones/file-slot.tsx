@@ -19,6 +19,8 @@ interface FileSlotProps {
   onSelect: (file: File) => void;
   onRemove: () => void;
   disabled?: boolean;
+  /** Clases extra para la zona de arrastre (alto según la superficie). */
+  dropZoneClassName?: string;
 }
 
 export function FileSlot({
@@ -30,6 +32,7 @@ export function FileSlot({
   onSelect,
   onRemove,
   disabled,
+  dropZoneClassName,
 }: FileSlotProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = React.useState(false);
@@ -101,6 +104,7 @@ export function FileSlot({
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
+          className={dropZoneClassName}
         />
       ) : (
         <SelectedFileChip

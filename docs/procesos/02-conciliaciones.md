@@ -228,14 +228,26 @@ Concilia los **asientos de diario de un periodo contra el balance** (débito y c
 1. Elige el **periodo** (`YYYY-MM`, por defecto el mes anterior) y la **subsidiaria** (lista de NetSuite, sin las de eliminación; por defecto SIIGO S.A.S). Deben ser los del balance.
 2. Elige el **origen de los asientos**:
    - **Consultar NetSuite** (recomendado): n8n trae las líneas contabilizadas del periodo contable y la subsidiaria. Un mes de SIIGO S.A.S (~2,1 millones de líneas) tarda ~45 s.
-   - **Subir archivo**: el Excel de *Auditoría Asientos de Diario* (todas sus hojas) o un CSV, hasta 50 MB. Un mes completo de SIIGO S.A.S no cabe: para eso está la consulta a NetSuite.
+   - **Subir archivo**: el Excel de *Auditoría Asientos de Diario* (todas sus hojas) o un CSV, **de cualquier tamaño**. El navegador lo resume por cuenta + tipo de documento y solo sube ese resumen (ver [Resumen en el navegador](#resumen-en-el-navegador)). Un mes de SIIGO S.A.S (160 MB, 2,08 millones de líneas en 3 hojas) se lee en ~30 s y el resumen pesa ~70 KB.
 3. Sube el **balance** (`.xlsx` o `.csv`, 10 MB): una fila de encabezado con columnas de débito y crédito (p. ej. `Debito (Oct 2026)`) y una fila por cuenta (número de cuenta en la primera columna o en `Cuenta`/`Financial Row`).
 4. **Conciliar asientos** → al terminar se muestran cuentas, cuántas cruzan y cuántas no, y las diferencias totales, y aparece **Descargar**.
+
+### Resumen en el navegador
+
+`src/lib/conciliaciones/asientos-lector/`, en un Web Worker (`resumir.worker.ts`, lanzado desde `cliente.ts`) para que la página siga respondiendo y se pueda cancelar.
+
+- **Sin librerías:** `zip.ts` lee el directorio central del .xlsx con `Blob.slice` (acceso aleatorio, Zip64 incluido) y descomprime cada entrada en streaming con `DecompressionStream("deflate-raw")` del navegador. El archivo nunca está completo en memoria (~330 MB de pico con el mes de SIIGO S.A.S, sobre todo los textos compartidos).
+- **Orden:** en un .xlsx `xl/sharedStrings.xml` va al final del ZIP, pero se necesita antes que las hojas; por eso se lee primero y luego cada hoja fila por fila. El progreso se calcula sobre los bytes comprimidos.
+- **Reglas (`resumir.ts`), las mismas del nodo *Leer asientos*:** encabezado en las primeras 15 filas de cada hoja (las que no lo tienen, como un cruce manual, se ignoran); cuenta = `Número Cuenta` o el prefijo numérico de `CUENTA CONTABLE`; **`DEBITO COP` / `CREDITO COP` antes que `DEBITO` / `CREDITO`** (las cuentas en dólares, p. ej. Davivienda Miami, solo cuadran en pesos); se omiten líneas con `FECHA DOCUMENTO` fuera del mes o de otra subsidiaria; `Transferencia…` se normaliza a `Transfer`.
+- **Lo que se envía:** un CSV `Número Cuenta;Cuenta Contable;Código Tipo;Líneas;Débito;Crédito` (se sube como `asientos`) y `lecturaCliente` en el `POST` (hojas, líneas leídas, omitidas, columnas usadas), que n8n muestra en la hoja Resumen. *Leer asientos* suma la columna `Líneas`.
+- **Navegadores:** Chrome, Edge, Firefox y Safari actuales (`DecompressionStream`, `TextDecoderStream`, módulos en workers). Sin soporte, la página lo dice antes de empezar.
+
+Con el archivo de octubre: 2.078.018 líneas → 535 grupos; 382 cuentas cuadran, 1 por redondeo (0,02), 81 sin movimiento y ninguna que no cruce.
 
 ### Flujo técnico
 
 - `POST /api/conciliaciones/asientos/upload-url` `{ kind: "balance" | "asientos", filename, size }` → URL firmada en `{usuario}/asientos-{kind}/{uuid}.{ext}`. El navegador sube con `PUT`.
-- `POST /api/conciliaciones/asientos` `{ fuente, periodo, subsidiariaId, balance: {storagePath, originalName}, asientos? }` → valida rutas y tamaños, resuelve la subsidiaria contra NetSuite y llama a n8n con **JSON** (no multipart): URLs firmadas de descarga (1 h) para los archivos y de subida para el resultado. Responde `202 { jobId }`.
+- `POST /api/conciliaciones/asientos` `{ fuente, periodo, subsidiariaId, balance: {storagePath, originalName}, asientos?, lecturaCliente? }` → valida rutas y tamaños, resuelve la subsidiaria contra NetSuite y llama a n8n con **JSON** (no multipart): URLs firmadas de descarga (1 h) para los archivos y de subida para el resultado. Responde `202 { jobId }`.
 - `GET /api/conciliaciones/asientos?job=` → `202` pendiente | el Excel con el header `X-Resumen` (JSON `encodeURIComponent`) | `{ error, code }`. Al leer el resultado borra el Excel, el estado y los archivos de entrada (lista en `{usuario}/resultado/{jobId}.entradas`); lo huérfano lo borra la limpieza diaria.
 - Lógica: `src/lib/conciliaciones/asientos.ts` (servidor) y `asientos-shared.ts` (límites y tipos). UI: `src/components/conciliaciones/asientos/asientos-page.tsx`.
 
@@ -245,7 +257,7 @@ Proyecto Contabilidad › carpeta Conciliaciones, webhook `POST /webhook/concili
 
 1. **Validar entrada** → **Descargar balance** → **Leer balance**: lector propio de `.xlsx`/`.csv` (n8n Cloud no trae librerías de Excel; descomprime con `zlib` o con un inflate en JS si no está permitido). Avisa si el encabezado del balance dice otro mes o si el balance no cuadra.
 2. **NetSuite** (vía el sub-flujo `NetSuite | SuiteQL Query`): *Consulta periodo* (`accountingperiod` del mes, sin trimestres/años) → *Consulta movimientos*: `SUM(tal.debit)`, `SUM(tal.credit)`, `COUNT(*)` de `transactionaccountingline` con `tal.posting = 'T'`, `t.postingperiod = <id>` y `tl.subsidiary = <id>`, agrupado por `tal.account, t.type` (sin unir `account`: así tarda ~40 s; con el join o con el periodo como subconsulta pasa de 6 min) → *Consulta cuentas* (número, nombre y tipo de las cuentas usadas) → *Unir NetSuite*.
-3. **Archivo**: *Descargar asientos* → *Leer asientos*: reconoce `Número Cuenta` / `Cuenta Contable`, `Débito`, `Crédito` (o `Monto`), `Código Tipo` / `Tipo Documento`, `Fecha` y `Subsidiaria` en cualquier hoja; omite (y cuenta) líneas fuera del mes o de otra subsidiaria.
+3. **Archivo**: *Descargar asientos* → *Leer asientos*: desde el portal recibe el resumen del navegador (columna `Líneas`) y usa `lecturaCliente`; también acepta un archivo crudo (≤ 50 MB) con `Número Cuenta` / `Cuenta Contable`, `Débito COP` / `Débito`, `Crédito COP` / `Crédito` (o `Monto`), `Código Tipo` / `Tipo de documento`, `Fecha` / `Fecha documento` y `Subsidiaria` en cualquier hoja.
 4. **Conciliar y armar Excel**: cruza por número de cuenta (las filas sin número, como `VAT on Sales CO`, por nombre) y arma el `.xlsx` a mano (ZIP sin compresión).
 
 ### Lógica del cruce y Excel resultante
@@ -258,7 +270,7 @@ Hojas: **Resumen** (parámetros, avisos, conteos, totales y casos), **Conciliaci
 
 ### Hallazgos con octubre 2026 (SIIGO S.A.S)
 
-De 465 cuentas, 336 cruzan (3 por redondeo), 80 sin movimiento y 49 no cruzan. Las diferencias grandes son de bancos (Davivienda, Bancolombia, Bogotá, fondo de inversión): **SuiteQL no devuelve ninguna transacción tipo `Transfer`** en el periodo, así que el rol de la integración de NetSuite probablemente no tiene permiso para *Transferir fondos*. Las retenciones (2365xx/2367xx/2368xx) aparecen en los asientos con débito = crédito y en el balance solo con el crédito. Hay además ~3.300 millones en líneas contables sin cuenta (`(sin cuenta)`).
+**Con NetSuite como fuente**: de 465 cuentas, 336 cruzan (3 por redondeo), 80 sin movimiento y 49 no cruzan. **Con el Excel de Auditoría** (el mismo mes) no queda ninguna diferencia, lo que confirma que el faltante es de la consulta SuiteQL y no de la contabilidad. Las diferencias grandes son de bancos (Davivienda, Bancolombia, Bogotá, fondo de inversión): **SuiteQL no devuelve ninguna transacción tipo `Transfer`** en el periodo, así que el rol de la integración de NetSuite probablemente no tiene permiso para *Transferir fondos*. Las retenciones (2365xx/2367xx/2368xx) aparecen en los asientos con débito = crédito y en el balance solo con el crédito. Hay además ~3.300 millones en líneas contables sin cuenta (`(sin cuenta)`).
 
 ## Errores
 

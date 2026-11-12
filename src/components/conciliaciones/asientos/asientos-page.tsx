@@ -17,8 +17,6 @@ import {
 import {
   ASIENTOS_EXTENSIONES,
   BALANCE_EXTENSIONES,
-  MAX_ASIENTOS_BYTES,
-  MAX_ASIENTOS_LABEL,
   MAX_BALANCE_BYTES,
   MAX_BALANCE_LABEL,
   PERIODO_RE,
@@ -28,6 +26,8 @@ import {
   type Subsidiaria,
 } from "@/lib/conciliaciones/asientos-shared";
 import { cn } from "@/lib/utils";
+
+import { resumirEnNavegador, type ResumenCliente } from "@/lib/conciliaciones/asientos-lector/cliente";
 
 import { FileSlot } from "../file-slot";
 import type { ConciliacionRunStatus } from "../types";
@@ -69,6 +69,16 @@ function esperar(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/** Tarjeta de la superficie: relleno más corto cuando la ventana es baja. */
+const CARD =
+  "flex flex-col rounded-lg border border-border bg-card p-5 shadow-sm h-short:p-4";
+/**
+ * Alto de la zona de archivo y del panel "Se consultan en NetSuite": el mismo en las dos
+ * columnas y más bajo según el alto de la ventana, para que la página quepa sin scroll.
+ */
+const ZONA =
+  "min-h-36 py-6 h-short:min-h-28 h-short:gap-2 h-short:py-3 h-low:min-h-24 h-low:[&>div:first-child:not(:only-child)]:hidden";
+
 const fmtEntero = new Intl.NumberFormat("es-CO");
 const fmtPesos = new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -96,6 +106,8 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
   const [status, setStatus] = React.useState<ConciliacionRunStatus>("idle");
   const [resultado, setResultado] = React.useState<Resultado | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  /** Lectura del archivo de asientos en el equipo (antes de subir). */
+  const [progreso, setProgreso] = React.useState<{ fraccion: number; etapa: string } | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
 
   React.useEffect(() => () => abortRef.current?.abort(), []);
@@ -139,11 +151,7 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
       return;
     }
     if (file.size > max) {
-      toast.error(
-        fuente === "archivo" && etiqueta === "El archivo de asientos"
-          ? `${etiqueta} supera ${maxLabel}. Para un mes completo usa “Consultar NetSuite”.`
-          : `${etiqueta} supera el límite de ${maxLabel}.`,
-      );
+      toast.error(`${etiqueta} supera el límite de ${maxLabel}.`);
       return;
     }
     set(file);
@@ -188,8 +196,25 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
     };
 
     try {
+      // Los asientos se resumen aquí (por cuenta + tipo): a n8n solo viaja el resumen.
+      let resumenAsientos: ResumenCliente | null = null;
+      if (fuente === "archivo" && asientos) {
+        const [y, m] = periodo.split("-").map(Number);
+        const ultimo = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+        setProgreso({ fraccion: 0, etapa: "Preparando la lectura" });
+        resumenAsientos = await resumirEnNavegador(
+          asientos,
+          { desde: `${periodo}-01`, hasta: `${periodo}-${String(ultimo).padStart(2, "0")}` },
+          subsidiaria?.nombre,
+          (fraccion, etapa) => setProgreso({ fraccion, etapa }),
+          signal,
+        );
+        setProgreso(null);
+      }
       const balancePath = await subir(balance, "balance", signal);
-      const asientosPath = fuente === "archivo" && asientos ? await subir(asientos, "asientos", signal) : null;
+      const asientosPath = resumenAsientos
+        ? await subir(new File([resumenAsientos.csv], "resumen_asientos.csv", { type: "text/csv" }), "asientos", signal)
+        : null;
       setStatus("processing");
 
       let res = await fetch("/api/conciliaciones/asientos", {
@@ -200,8 +225,11 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
           periodo,
           subsidiariaId: subsidiaria?.id ?? "",
           balance: { storagePath: balancePath, originalName: balance.name },
-          ...(asientosPath && asientos
-            ? { asientos: { storagePath: asientosPath, originalName: asientos.name } }
+          ...(asientosPath && asientos && resumenAsientos
+            ? {
+                asientos: { storagePath: asientosPath, originalName: asientos.name },
+                lecturaCliente: resumenAsientos.lectura,
+              }
             : {}),
         }),
         signal,
@@ -253,6 +281,7 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
       }
       fallar((err as Error).message || "No se pudo contactar el servicio.");
     } finally {
+      setProgreso(null);
       if (abortRef.current === controller) abortRef.current = null;
     }
   }
@@ -269,29 +298,29 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
-  const slotStatus: ConciliacionRunStatus = busy ? status : "idle";
+  // Mientras se lee el archivo en el equipo todavía no se sube nada.
+  const slotStatus: ConciliacionRunStatus = progreso ? "processing" : busy ? status : "idle";
   const r = resultado?.resumen;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex min-w-0 flex-col gap-2">
+    <div className="flex flex-col gap-6 h-short:gap-4 h-tiny:gap-3">
+      <header className="flex min-w-0 flex-col gap-2 h-short:gap-1">
         <h1 className="text-base font-semibold tracking-tight text-foreground">Conciliación de asientos de diario</h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Cruza, cuenta por cuenta, los débitos y créditos de los asientos del periodo contra el balance. El Excel
-          resultante trae el resumen, el detalle de lo que cruzó y lo que no, y un comparativo con la explicación de
-          cada diferencia.
+        <p className="max-w-3xl text-sm text-muted-foreground h-tiny:sr-only">
+          Cruza, cuenta por cuenta, los débitos y créditos de los asientos del periodo contra el balance y entrega un
+          Excel con lo que cruzó, lo que no y la explicación de cada diferencia.
         </p>
       </header>
 
       <section
         aria-labelledby="asientos-parametros"
-        className="flex flex-col gap-5 rounded-lg border border-border bg-card p-5 shadow-sm"
+        className={cn(CARD, "gap-5 h-short:gap-3")}
       >
         <header className="flex flex-col gap-1.5">
           <h2 id="asientos-parametros" className="text-base font-semibold tracking-tight text-foreground">
             Periodo y origen de los asientos
           </h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground h-low:hidden">
             El periodo y la subsidiaria deben ser los mismos del balance que vas a subir.
           </p>
         </header>
@@ -371,7 +400,7 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
               activa={fuente === "archivo"}
               icono={<FileSpreadsheet className="size-4" aria-hidden />}
               titulo="Subir archivo"
-              detalle={`El Excel de Auditoría Asientos de Diario o un CSV con número de cuenta, débito y crédito. Hasta ${MAX_ASIENTOS_LABEL}.`}
+              detalle="El Excel de Auditoría Asientos de Diario o un CSV, de cualquier tamaño. Se resume en tu equipo y solo se envía el resumen por cuenta."
               onSelect={() => {
                 setFuente("archivo");
                 limpiarResultado();
@@ -383,13 +412,13 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
 
       <section
         aria-labelledby="asientos-archivos"
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
+        className={cn(CARD, "gap-4 h-short:gap-3")}
       >
         <header className="flex flex-col gap-1.5">
           <h2 id="asientos-archivos" className="text-base font-semibold tracking-tight text-foreground">
             Archivos
           </h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground h-low:hidden">
             El balance necesita una fila de encabezado con columnas de débito y crédito, y una fila por cuenta.
           </p>
         </header>
@@ -401,6 +430,7 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
               ariaLabel="Seleccionar balance"
               hint={`o haz clic para seleccionarlo · .xlsx o .csv (máx. ${MAX_BALANCE_LABEL})`}
               accept={BALANCE_EXTENSIONES.map((e) => "." + e).join(",")}
+              dropZoneClassName={ZONA}
               onSelect={(f) => elegirArchivo(f, BALANCE_EXTENSIONES, MAX_BALANCE_BYTES, MAX_BALANCE_LABEL, "El balance", setBalance)}
               onRemove={() => {
                 cancelar();
@@ -416,10 +446,11 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
                 file={asientos}
                 status={slotStatus}
                 ariaLabel="Seleccionar archivo de asientos"
-                hint={`o haz clic para seleccionarlo · .xlsx o .csv (máx. ${MAX_ASIENTOS_LABEL})`}
+                hint="o haz clic para seleccionarlo · .xlsx o .csv, de cualquier tamaño"
                 accept={ASIENTOS_EXTENSIONES.map((e) => "." + e).join(",")}
+                dropZoneClassName={ZONA}
                 onSelect={(f) =>
-                  elegirArchivo(f, ASIENTOS_EXTENSIONES, MAX_ASIENTOS_BYTES, MAX_ASIENTOS_LABEL, "El archivo de asientos", setAsientos)
+                  elegirArchivo(f, ASIENTOS_EXTENSIONES, Number.POSITIVE_INFINITY, "", "El archivo de asientos", setAsientos)
                 }
                 onRemove={() => {
                   cancelar();
@@ -431,9 +462,14 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
             </Slot>
           ) : (
             <Slot titulo="Asientos de diario" icono={<CloudDownload className="size-4" aria-hidden />}>
-              <div className="flex min-h-28 flex-col justify-center gap-1 rounded-md border border-dashed border-border bg-muted/40 px-4 py-3 text-sm">
+              <div
+                className={cn(
+                  ZONA,
+                  "flex flex-1 flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border bg-muted/40 px-6 text-center text-sm",
+                )}
+              >
                 <p className="font-medium text-foreground">Se consultan en NetSuite</p>
-                <p className="text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Periodo contable <span className="text-foreground">{periodoValido ? nombrePeriodo(periodo) : "—"}</span>
                   {" · "}
                   {subsidiaria ? <span className="text-foreground">{subsidiaria.nombre}</span> : "sin subsidiaria"}
@@ -448,6 +484,8 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
         <div className="mr-auto min-w-0" role="status" aria-live="polite">
           {soloLectura ? (
             <SoloLectura>Tienes acceso de solo lectura: no puedes ejecutar conciliaciones.</SoloLectura>
+          ) : progreso ? (
+            <ProgresoLectura fraccion={progreso.fraccion} etapa={progreso.etapa} />
           ) : status === "uploading" ? (
             <p className="text-sm text-muted-foreground">Subiendo archivos…</p>
           ) : status === "processing" ? (
@@ -473,7 +511,7 @@ export function AsientosPageClient({ subsidiarias, errorSubsidiarias, soloLectur
           onClick={procesar}
           disabled={!canSubmit}
         >
-          {status === "uploading" ? "Subiendo…" : status === "processing" ? "Conciliando…" : "Conciliar asientos"}
+          {progreso ? "Leyendo archivo…" : status === "uploading" ? "Subiendo…" : status === "processing" ? "Conciliando…" : "Conciliar asientos"}
         </Button>
         {status === "done" && resultado && (
           <Button type="button" onClick={descargar}>
@@ -509,7 +547,7 @@ function OpcionFuente({
       disabled={deshabilitada}
       onClick={onSelect}
       className={cn(
-        "flex min-w-0 items-start gap-3 rounded-md border px-4 py-3 text-left transition-colors",
+        "flex min-w-0 items-start gap-3 rounded-md border px-4 py-3 text-left transition-colors h-short:py-2",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         "disabled:cursor-not-allowed disabled:opacity-50",
         activa ? "border-primary/40 bg-primary/5" : "border-border bg-background hover:bg-muted/40",
@@ -529,7 +567,7 @@ function OpcionFuente({
           <span className="text-muted-foreground">{icono}</span>
           {titulo}
         </span>
-        <span className="text-xs text-muted-foreground">{detalle}</span>
+        <span className="text-xs text-muted-foreground h-low:line-clamp-1" title={detalle}>{detalle}</span>
       </span>
     </button>
   );
@@ -547,8 +585,8 @@ function Slot({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
+    <div className="flex h-full min-w-0 flex-col gap-3 h-short:gap-2">
+      <div className="flex min-h-6 items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="flex size-5 items-center justify-center text-muted-foreground">{icono}</span>
           <span className="text-sm font-medium text-foreground">{titulo}</span>
@@ -560,6 +598,28 @@ function Slot({
         )}
       </div>
       {children}
+    </div>
+  );
+}
+
+function ProgresoLectura({ fraccion, etapa }: { fraccion: number; etapa: string }) {
+  const pct = Math.min(100, Math.max(0, Math.round(fraccion * 100)));
+  return (
+    <div className="flex w-full max-w-md flex-col gap-1.5">
+      <p className="flex items-baseline justify-between gap-3 text-sm text-muted-foreground">
+        <span className="truncate">{etapa} en tu equipo…</span>
+        <span className="font-mono text-xs tabular-nums text-foreground">{pct} %</span>
+      </p>
+      <div
+        role="progressbar"
+        aria-label="Lectura del archivo de asientos"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        className="h-1.5 overflow-hidden rounded-full bg-muted"
+      >
+        <div className="h-full rounded-full bg-primary transition-[width] duration-200" style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }

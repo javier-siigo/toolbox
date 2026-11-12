@@ -11,6 +11,10 @@
 @source not "../../node_modules";
 
 @custom-variant dark (&:is(.dark *));
+/* Ventanas bajas (portátiles 1366×768 con barra del navegador): compactan superficies de un solo paso. */
+@custom-variant h-short (@media (max-height: 900px));
+@custom-variant h-low (@media (max-height: 800px));
+@custom-variant h-tiny (@media (max-height: 720px));
 
 :root {
   /* Siigo brand blue (#009DFF) anchors the brand voice.

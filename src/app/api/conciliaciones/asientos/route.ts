@@ -8,7 +8,7 @@ import {
   iniciarConciliacionAsientos,
   leerResultadoAsientos,
 } from "@/lib/conciliaciones/asientos";
-import { PERIODO_RE, type FuenteAsientos } from "@/lib/conciliaciones/asientos-shared";
+import { PERIODO_RE, sanearLectura, type FuenteAsientos } from "@/lib/conciliaciones/asientos-shared";
 import { ConciliacionError } from "@/lib/conciliaciones/conciliar";
 import { contentDispositionAdjunto } from "@/lib/uploads";
 
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       periodo,
       subsidiaria,
       balance,
-      ...(asientos ? { asientos } : {}),
+      ...(asientos ? { asientos, lecturaCliente: sanearLectura(body.lecturaCliente) } : {}),
     });
     return NextResponse.json({ jobId }, { status: 202, headers: { "Cache-Control": "no-store" } });
   } catch (err) {

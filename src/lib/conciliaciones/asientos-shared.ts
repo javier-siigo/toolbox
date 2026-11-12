@@ -19,14 +19,41 @@ export interface ResumenAsientos {
   difCredito: number | null;
 }
 
+/** Resumen de la lectura que hizo el navegador; n8n lo muestra en la hoja Resumen. */
+export interface LecturaCliente {
+  hojas: string[];
+  filas: number;
+  usadas: number;
+  fueraPeriodo: number;
+  otraSubsidiaria: number;
+  sinCuenta: number;
+  columnas: string;
+}
+
+/** Valida y recorta lo que manda el navegador (llega tal cual a n8n). */
+export function sanearLectura(v: unknown): LecturaCliente | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const o = v as Record<string, unknown>;
+  const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.round(x) : 0);
+  return {
+    hojas: Array.isArray(o.hojas) ? o.hojas.filter((h): h is string => typeof h === "string").slice(0, 50).map((h) => h.slice(0, 80)) : [],
+    filas: n(o.filas),
+    usadas: n(o.usadas),
+    fueraPeriodo: n(o.fueraPeriodo),
+    otraSubsidiaria: n(o.otraSubsidiaria),
+    sinCuenta: n(o.sinCuenta),
+    columnas: typeof o.columnas === "string" ? o.columnas.slice(0, 300) : "",
+  };
+}
+
 export const BALANCE_EXTENSIONES = ["xlsx", "csv"] as const;
 export const ASIENTOS_EXTENSIONES = ["xlsx", "csv"] as const;
 
 export const MAX_BALANCE_BYTES = 10 * 1024 * 1024;
 export const MAX_BALANCE_LABEL = "10 MB";
 /**
- * n8n lee el archivo completo en memoria: un mes entero de SIIGO S.A.S (~2 millones de
- * líneas) no cabe; para eso está la consulta automática a NetSuite.
+ * Tope del archivo que llega a Storage. Desde la página el archivo de asientos se resume
+ * en el navegador (cualquier tamaño) y lo que se sube es ese resumen, de pocos KB.
  */
 export const MAX_ASIENTOS_BYTES = 50 * 1024 * 1024;
 export const MAX_ASIENTOS_LABEL = "50 MB";

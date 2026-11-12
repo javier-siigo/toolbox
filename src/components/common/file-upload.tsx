@@ -44,6 +44,8 @@ interface FileDropZoneProps {
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
+  /** Ajustes de alto/relleno de la superficie que lo usa. */
+  className?: string;
 }
 
 export function FileDropZone({
@@ -57,6 +59,7 @@ export function FileDropZone({
   onDragOver,
   onDragLeave,
   onDrop,
+  className,
 }: FileDropZoneProps) {
   return (
     <div
@@ -74,6 +77,7 @@ export function FileDropZone({
         dragOver
           ? "border-primary bg-primary/5"
           : "border-border hover:border-foreground/30 hover:bg-muted/40",
+        className,
       )}
     >
       <div
