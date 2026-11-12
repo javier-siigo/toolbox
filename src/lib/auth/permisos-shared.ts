@@ -13,6 +13,8 @@ export const PROCESOS = {
   CONCILIACION_ECUADOR: "conciliaciones.ecuador",
   CONCILIACION_MEXICO: "conciliaciones.mexico",
   CONCILIACION_URUGUAY: "conciliaciones.uruguay",
+  /** Asientos de diario vs balance: no depende de un país. */
+  CONCILIACION_ASIENTOS: "conciliaciones.asientos-diario",
   GESTION_ANTICIPOS: "ingresos.gestion-anticipos",
   NOTAS_CREDITO: "ingresos.notas-credito",
   CALCULO_COMISIONES: "ingresos.calculo-comisiones",

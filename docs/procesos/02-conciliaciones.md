@@ -14,6 +14,8 @@ Permite al equipo contable **conciliar el extracto bancario de un período** (y 
 
 Las páginas implementadas usan el mismo componente `ConciliacionesPageClient`. Algunos bancos tienen **particularidades** que agregan pasos a la UI (ver más abajo).
 
+Fuera de los países está la **conciliación de asientos de diario vs balance** (`/conciliaciones/asientos-diario`), con su propio flujo: ver [Asientos de diario](#asientos-de-diario).
+
 ## Acceso
 
 Un proceso por país (`conciliaciones.colombia`, `conciliaciones.mexico`…). La página llama a `requireAcceso` y devuelve 404 sin acceso; las tres APIs (`upload-url`, `conciliar`, `convertir-txt`) resuelven el proceso con el `pais` del body y exigen nivel `usar`. Con `ver` se ven los bancos pero el botón de procesar queda deshabilitado.
@@ -216,6 +218,47 @@ Slug `inbursa-103-mexico`. Excel *Estado de Cuenta Individual* con la línea `Cu
 - **Sentido:** `Cargo` = salida (Débito, monto negativo); `Abono` = entrada (Crédito, positivo).
 - **Llaves:** `Referencia` y `Ref. Externa` (columnas resaltadas). En NetSuite la referencia aparece **dentro del memo** (Pago de factura, Diario), no idéntica: `E 10087025 SP15270` ↔ memo `E 10087025`; `Eva 5741` ↔ `DEVOLUCIÓN EVA-5741 …`.
 - **Cruce (en el *Normalize* del adapter):** primero `Referencia`; si no cruza, `Ref. Externa`. Coincidencia exacta, llave contenida en el memo (≥ 5 caracteres con dígitos) o memo como inicio de la llave, con el mismo sentido y monto. Lo que siga sin cruzar se intenta solo por coincidencia exacta aunque el monto difiera (sale *Diferencia de monto*). Una palabra sin dígitos (p. ej. `Devolucion`) no cuenta como llave. Al cruzar, el movimiento y el registro NetSuite reciben la misma llave; *Merge Results* del orquestador no cambia.
+
+## Asientos de diario
+
+Concilia los **asientos de diario de un periodo contra el balance** (débito y crédito por cuenta). No depende de un país ni de un banco. Proceso de permisos: `conciliaciones.asientos-diario` (migración `20261112120000_conciliacion_asientos_diario.sql`, que además sube el límite del bucket `conciliaciones-uploads` a 50 MB).
+
+### Flujo del usuario
+
+1. Elige el **periodo** (`YYYY-MM`, por defecto el mes anterior) y la **subsidiaria** (lista de NetSuite, sin las de eliminación; por defecto SIIGO S.A.S). Deben ser los del balance.
+2. Elige el **origen de los asientos**:
+   - **Consultar NetSuite** (recomendado): n8n trae las líneas contabilizadas del periodo contable y la subsidiaria. Un mes de SIIGO S.A.S (~2,1 millones de líneas) tarda ~45 s.
+   - **Subir archivo**: el Excel de *Auditoría Asientos de Diario* (todas sus hojas) o un CSV, hasta 50 MB. Un mes completo de SIIGO S.A.S no cabe: para eso está la consulta a NetSuite.
+3. Sube el **balance** (`.xlsx` o `.csv`, 10 MB): una fila de encabezado con columnas de débito y crédito (p. ej. `Debito (Oct 2026)`) y una fila por cuenta (número de cuenta en la primera columna o en `Cuenta`/`Financial Row`).
+4. **Conciliar asientos** → al terminar se muestran cuentas, cuántas cruzan y cuántas no, y las diferencias totales, y aparece **Descargar**.
+
+### Flujo técnico
+
+- `POST /api/conciliaciones/asientos/upload-url` `{ kind: "balance" | "asientos", filename, size }` → URL firmada en `{usuario}/asientos-{kind}/{uuid}.{ext}`. El navegador sube con `PUT`.
+- `POST /api/conciliaciones/asientos` `{ fuente, periodo, subsidiariaId, balance: {storagePath, originalName}, asientos? }` → valida rutas y tamaños, resuelve la subsidiaria contra NetSuite y llama a n8n con **JSON** (no multipart): URLs firmadas de descarga (1 h) para los archivos y de subida para el resultado. Responde `202 { jobId }`.
+- `GET /api/conciliaciones/asientos?job=` → `202` pendiente | el Excel con el header `X-Resumen` (JSON `encodeURIComponent`) | `{ error, code }`. Al leer el resultado borra el Excel, el estado y los archivos de entrada (lista en `{usuario}/resultado/{jobId}.entradas`); lo huérfano lo borra la limpieza diaria.
+- Lógica: `src/lib/conciliaciones/asientos.ts` (servidor) y `asientos-shared.ts` (límites y tipos). UI: `src/components/conciliaciones/asientos/asientos-page.tsx`.
+
+### Workflow n8n: `Conciliación | Asientos de diario vs Balance (Webhook)`
+
+Proyecto Contabilidad › carpeta Conciliaciones, webhook `POST /webhook/conciliacion-asientos`. Mismo patrón asíncrono que `/webhook/reconciliation`: *Responder recibido* (202) → … → *Subir Excel* → *Subir estado* `{ ok, fileName, cuentas, cruzan, redondeo, noCruzan, sinMovimiento, soloBalance, soloAsientos, lineas, difDebito, difCredito }`; cualquier fallo va a *Subir error* `{ ok: false, error }`.
+
+1. **Validar entrada** → **Descargar balance** → **Leer balance**: lector propio de `.xlsx`/`.csv` (n8n Cloud no trae librerías de Excel; descomprime con `zlib` o con un inflate en JS si no está permitido). Avisa si el encabezado del balance dice otro mes o si el balance no cuadra.
+2. **NetSuite** (vía el sub-flujo `NetSuite | SuiteQL Query`): *Consulta periodo* (`accountingperiod` del mes, sin trimestres/años) → *Consulta movimientos*: `SUM(tal.debit)`, `SUM(tal.credit)`, `COUNT(*)` de `transactionaccountingline` con `tal.posting = 'T'`, `t.postingperiod = <id>` y `tl.subsidiary = <id>`, agrupado por `tal.account, t.type` (sin unir `account`: así tarda ~40 s; con el join o con el periodo como subconsulta pasa de 6 min) → *Consulta cuentas* (número, nombre y tipo de las cuentas usadas) → *Unir NetSuite*.
+3. **Archivo**: *Descargar asientos* → *Leer asientos*: reconoce `Número Cuenta` / `Cuenta Contable`, `Débito`, `Crédito` (o `Monto`), `Código Tipo` / `Tipo Documento`, `Fecha` y `Subsidiaria` en cualquier hoja; omite (y cuenta) líneas fuera del mes o de otra subsidiaria.
+4. **Conciliar y armar Excel**: cruza por número de cuenta (las filas sin número, como `VAT on Sales CO`, por nombre) y arma el `.xlsx` a mano (ZIP sin compresión).
+
+### Lógica del cruce y Excel resultante
+
+Diferencia = Balance − Asientos, por débito y por crédito. Estados: **Cruza** (igual al centavo), **Cruza con diferencia menor** (< 1, redondeo), **No cruza**, **Sin movimiento**. Casos de *No cruza*: solo en balance, solo en asientos, diferencia en débito, en crédito, en ambos, o el **mismo valor en débito y crédito** (un movimiento que entra y sale de la cuenta, reverso/reclasificación, que solo está en un reporte; el neto coincide).
+
+Cada cuenta que no cruza lleva una **explicación**: cuánto falta o sobra y de qué lado, una causa probable (tipo de transacción no exportado, otra subsidiaria, otro periodo; transferencias entre bancos si la cuenta es de bancos y los asientos no traen ninguna `Transfer`; cuenta que en los asientos se cancela en el mes y en el balance solo muestra un lado, típico de retenciones) y la **posible contrapartida** (otras cuentas con la misma diferencia).
+
+Hojas: **Resumen** (parámetros, avisos, conteos, totales y casos), **Conciliación** (todas las cuentas con estado, caso, débito/crédito/neto de cada reporte, diferencias, líneas y explicación; filtros), **Comparativo** (solo lo que no cruza, una fila por cuenta y lado: según balance, según asientos, diferencia, %, contrapartida, tipos de documento y explicación) y **Detalle por tipo** (cuentas que no cruzan desglosadas por tipo de documento).
+
+### Hallazgos con octubre 2026 (SIIGO S.A.S)
+
+De 465 cuentas, 336 cruzan (3 por redondeo), 80 sin movimiento y 49 no cruzan. Las diferencias grandes son de bancos (Davivienda, Bancolombia, Bogotá, fondo de inversión): **SuiteQL no devuelve ninguna transacción tipo `Transfer`** en el periodo, así que el rol de la integración de NetSuite probablemente no tiene permiso para *Transferir fondos*. Las retenciones (2365xx/2367xx/2368xx) aparecen en los asientos con débito = crédito y en el balance solo con el crédito. Hay además ~3.300 millones en líneas contables sin cuenta (`(sin cuenta)`).
 
 ## Errores
 

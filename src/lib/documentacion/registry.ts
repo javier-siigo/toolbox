@@ -36,8 +36,8 @@ export const DOCUMENTOS: readonly DocumentoMeta[] = [
     slug: "conciliaciones",
     archivo: "02-conciliaciones.md",
     titulo: "Conciliaciones bancarias",
-    descripcion: "Conciliación por país y banco: flujo, contrato con n8n, datos y errores.",
-    requiere: Object.values(CONCILIACION_POR_PAIS),
+    descripcion: "Conciliación por país y banco, y de asientos de diario vs balance: flujo, contrato con n8n, datos y errores.",
+    requiere: [...Object.values(CONCILIACION_POR_PAIS), PROCESOS.CONCILIACION_ASIENTOS],
   },
   {
     slug: "notas-credito",

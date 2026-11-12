@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeftRight,
+  BookCheck,
   BookOpen,
   Calculator,
   DatabaseZap,
@@ -87,6 +88,14 @@ export const AREAS: Area[] = [
         description: "Conciliación contable para operaciones en Uruguay.",
         icon: Scale,
         flagCode: "UY",
+      },
+      {
+        id: PROCESOS.CONCILIACION_ASIENTOS,
+        slug: "asientos-diario",
+        label: "Asientos de diario",
+        description:
+          "Cruza los asientos de diario del periodo contra el balance, cuenta por cuenta, y explica cada diferencia.",
+        icon: BookCheck,
       },
     ],
   },
