@@ -191,6 +191,7 @@ Slug `banamex-681-mexico`. Una sola conciliación con dos fases: el **extracto**
 
 - **Adapter n8n:** `Adapter | Banamex 681 MX` (Contabilidad / Mexico), en `bank_registry` con `cuentas = BNMMXN681`, `cuenta_netsuite = 11130103` (BANAMEX 8681 $) y `archivos` con la regla `domiciliacion` (`camposRegex ^domiciliacion_\d+$`, `multiple`, `opcional`).
 - **Orquestador:** *Classify Files* acepta reglas `multiple: true` (todos los binarios que coinciden pasan como `rol_0`, `rol_1`, …) y `camposRegex`. Sin `archivos` configurados no cambia nada.
+- **Documentos de NetSuite:** la query trae todo lo contabilizado en la 11130103, sin filtrar por tipo (noviembre 2026: Venta de Contado, Pago, Depósito de cliente, Diario). **Faltan las transferencias de fondos** (p. ej. `Transfer` 61783290, 10/11/2026, traspaso de 5.530.000): probado el 17/11/2026, SuiteQL devuelve 0 transacciones `Transfer` en toda la historia y ninguna línea contable de la 61783290, aunque los demás documentos del mismo Excel de la contadora sí salen por ID. Es el mismo permiso que falta en asientos de diario: **agregar *Transferir fondos* (Ver) al rol de la integración en NetSuite**. Cuando exista, la query actual las trae sin cambios.
 - **App:** en Banamex 681 aparece la fila "¿Tienes los TXT de domiciliación? Agregar TXT" (`DomiciliacionRow`). Se suben por Storage (`upload-url` con `kind = domiciliacion`) y `POST /api/conciliaciones/conciliar` los recibe en `domiciliacion: [{ storagePath, originalName }]`; n8n los recibe como `domiciliacion_0..n`. Config en `BANCOS_CON_DOMICILIACION` (`particularidades.ts`).
 
 **Fase 1 — extracto (no se usa Flow Id).** `Referencia` = `<texto libre>; <16 dígitos>`. Los 16 dígitos son prefijo (8) + folio (8): prefijo `00000859` (orden de abono / SPEI) o `NN` + `AAMMDD` de la fecha (depósito). Llave = `FOLIO` + folio sin ceros a la izquierda, que es el **memo** del Pago / Depósito de cliente en NetSuite (`0000085900685571` → `685571`). Si el prefijo no valida, el movimiento queda sin llave. Las liquidaciones `ABONO LIQ DOMI …` y los `DEVOL/REVERSO` de domiciliación no tienen un registro NetSuite propio: quedan visibles con una llave descriptiva (`LIQ DOMI TARJ BNM ARCH01 20261104`) que no cruza.
@@ -230,6 +231,37 @@ Slug `inbursa-103-mexico`. Excel *Estado de Cuenta Individual* con la línea `Cu
   Una palabra sin dígitos (p. ej. `Devolucion`) no cuenta como llave. Al cruzar, el movimiento y sus registros reciben la misma llave. *Merge Results* del orquestador no cambia: con varios registros los muestra como `(1/27) … (27/27)` y compara la suma. La columna *Cruce* del Excel dice qué regla cruzó cada movimiento, para que la contadora revise primero los de R4 y R5.
 - **Lo que no cruza (noviembre 2026):** los traspasos internos ("Abono por traspaso"), comisiones e IVA, y las transferencias `24703TR…` de viáticos y nómina (`EVA…`, `SP…`) no tienen registro en NetSuite en la cuenta 11130101 en esas fechas. Quedan como *Solo en extracto*.
 - **No cubierto:** varios movimientos del banco contra **un** registro NetSuite (un pago partido en dos cargos). *Merge Results* lo marcaría como *Flow Id repetido*. No apareció en los datos; habría que cambiar el orquestador.
+
+### OXXO (México · reporte dLocal Go)
+
+Slug `oxxo-mexico`. El extracto es el reporte *Transactions* de dLocal Go (pagos en OXXO), no un estado de cuenta bancario: una fila por cobro, encabezado en la fila 1, `Date` en formato `MM/DD/AAAA hh:mm:ss`.
+
+- **Adapter n8n:** `Adapter | OXXO MX` (Contabilidad / Mexico), en `bank_registry` con `cuentas = OXXO` (el reporte no trae número de cuenta; el adapter pone `OXXO` en cada fila) y `cuenta_netsuite = 11300503` (PAGOS ONLINE : PAGOS ONLINE VARIOS : DLOCAL GO MX).
+- **Campos (marcados en amarillo por la contadora):** `Invoice Id` (llave), `Description`, `Client Id`, `Payment Method`, `Client Last Name`. Van en *Descripcion* del Excel; el `Invoice Id` sale en la columna *Flow Id*.
+- **Monto:** `Local Amount` (bruto, `MXN 3085.60`), que es el total de la Venta de Contado. `Balance Amount` es el neto y `Balance Fee` la comisión.
+- **Cruce (en el *Normalize* del adapter):**
+  1. `Invoice Id` = `custbody_referencia` de la *Venta de Contado*, o el número dentro del memo del *Depósito de cliente* (`8989465010868019`, `Pc Oct 31 8974756510841900`).
+  2. Si el `Invoice Id` no está en NetSuite: el pedido de `Description` (`10710213 - 2 000 Timbres`) contra `custbody_pedido` (= `externalid`). La columna *Cruce* dice cuál usó.
+  3. **Comisiones:** el adapter agrega una fila por día con la suma de `Balance Fee` de los cobros `COMPLETED` (llave `COMISIONES DLOCAL dd/mm/aaaa`, débito) contra el Diario `COMISIONES BANCARIAS DLOCAL dd/mm/aaaa`.
+- **Otros estados** (`Status` distinto de `COMPLETED`) quedan como *No aplica*.
+- **Prueba (17/11/2026, archivo de la contadora, 31/10 a 03/11):** 34 de 34 cobros cruzan por `Invoice Id` con el mismo monto (30 Ventas de Contado, 4 Depósitos de cliente). La comisión del 31/10 (1,861.31) cuadra exacta con el Diario 2005560. Los días 01/11 y 03/11 aún no tenían Diario de comisiones.
+
+### Stripe (México · CSV de pagos)
+
+Slug `stripe-mexico`. El extracto es el export *Payments* de Stripe en **CSV** (separado por `;` o `,`; si llega un Excel el adapter pide el CSV). Fechas en UTC (`Created date (UTC)`); el adapter las pasa a hora de México (UTC-6).
+
+- **CSV diarios → uno solo (en la app, sin n8n):** la fila "¿Tienes varios CSV diarios? Unificar en un CSV" (`TxtConvertRow` con `formato = "csv"`, config en `BANCOS_CON_CONVERSION`) manda los archivos a `POST /api/conciliaciones/convertir-txt`, que para este formato no llama a n8n: `unificarCsv` (`src/lib/conciliaciones/unificar-csv.ts`) exige el mismo encabezado en todos (el que no coincide sale en la lista de errores), junta las filas y omite las repetidas por `id` (un pago en dos archivos cuenta una vez). Devuelve `stripe-mexico_extracto.csv` con `x-archivos`, `x-registros`, `x-duplicados-omitidos` y `x-total-neto` (suma de `Amount`), y queda cargado como extracto. Mismos límites que los TXT: 31 archivos, 4 MB en total.
+
+- **Adapter n8n:** `Adapter | Stripe MX` (Contabilidad / Mexico), en `bank_registry` con `cuentas = STRIPE`, `cuenta_netsuite = 11300505` (PAGOS ONLINE : PAGOS ONLINE VARIOS : STRIPE MX) y `overrides = {"tolerancia":0.05}`.
+- **Llave:** NetSuite no guarda el id de Stripe. La *Venta de Contado* trae el **correo del cliente** en `custbody_referencia` (= `Customer Email`), y suele quedar con fecha del día siguiente al pago. El cruce (*Normalize*) es 1 a 1:
+  - **R1** correo + monto (diferencia ≤ 0.05) + fecha a ≤ 5 días, la más cercana.
+  - **R2** correo con monto distinto.
+  - **R3** sin correo: mismo monto y fecha cercana, solo si es único en los dos lados.
+  - El registro cruzado recibe el id de Stripe (`py_…` / `ch_…`) como llave, que sale en la columna *Flow Id*. La columna *Cruce* dice la regla y el redondeo.
+- **Redondeo:** NetSuite suma 1 a 4 centavos al total de la venta (11808.00 → 11808.02). Por eso *Merge Results* del orquestador lee `overrides.tolerancia` (por defecto 0.01, sin cambio para los demás bancos) y Stripe usa 0.05.
+- **Comisiones:** una fila por día con `Fee + Taxes On Fee` (llave `COMISIONES STRIPE dd/mm/aaaa`) contra el Diario `COMISIONES BANCARIAS STRIPE dd/mm/aaaa`.
+- **Monto:** `Amount` (bruto). `Status` distinto de `Paid` queda como *No aplica*; los reembolsos se anotan en *Descripcion*.
+- **Prueba (17/11/2026, CSV de muestra del 27/10):** 16 de 16 pagos cruzan por correo y monto (6 con redondeo de 0.01 a 0.04). La comisión del 27/10 no cuadra con el Diario (1,901.47 vs 2,773.53) porque la muestra trae solo parte del día; falta validarla con el CSV completo del mes.
 
 ## Asientos de diario
 

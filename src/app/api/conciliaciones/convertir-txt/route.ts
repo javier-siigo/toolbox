@@ -15,6 +15,7 @@ import {
   mensajeFormatoInvalido,
 } from "@/lib/conciliaciones/particularidades";
 import { getBancoPorSlug } from "@/lib/conciliaciones/bancos";
+import { unificarCsv } from "@/lib/conciliaciones/unificar-csv";
 import { hoyEnPais, periodoVigente } from "@/lib/conciliaciones/periodo";
 import { autorizar, respuestaDenegada } from "@/lib/auth/acceso";
 import { CONCILIACION_POR_PAIS } from "@/lib/auth/permisos-shared";
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
   }
   const config = getConversion(pais, banco);
   const webhookUrl = config && getWebhookConversion(pais, banco, config.formato);
-  if (!config || !webhookUrl) {
+  if (!config || (!webhookUrl && config.formato !== "csv")) {
     return jsonError(
       "Este banco no tiene unificación de archivos configurada.",
       "upstream_config",
@@ -81,6 +82,38 @@ export async function POST(request: Request) {
       "file_too_large",
       413,
     );
+  }
+
+  if (config.formato === "csv") {
+    const entradas = await Promise.all(
+      files.map(async (f) => ({ nombre: f.name, texto: await f.text() })),
+    );
+    const r = unificarCsv(entradas);
+    if (r.registros === 0) {
+      return NextResponse.json(
+        {
+          error: "Ningún CSV tiene registros para unificar.",
+          code: "bad_request",
+          archivosConError: r.archivosConError,
+        },
+        { status: 422 },
+      );
+    }
+    const headers = new Headers({
+      "Content-Type": "text/csv; charset=utf-8",
+      "Cache-Control": "no-store",
+      "x-archivos": String(r.archivos),
+      "x-registros": String(r.registros),
+      "x-duplicados-omitidos": String(r.duplicadosOmitidos),
+    });
+    if (r.totalNeto !== null) headers.set("x-total-neto", String(r.totalNeto));
+    if (r.archivosConError.length) {
+      headers.set("x-archivos-error", encodeURIComponent(JSON.stringify(r.archivosConError)));
+    }
+    return new Response(r.csv, { status: 200, headers });
+  }
+  if (!webhookUrl) {
+    return jsonError("Este banco no tiene unificación de archivos configurada.", "upstream_config", 400);
   }
 
   const bancoRow = await getBancoPorSlug(pais, banco);

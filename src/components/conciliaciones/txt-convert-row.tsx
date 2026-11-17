@@ -47,6 +47,24 @@ interface TxtConvertRowProps {
 
 const MXN = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
+const TEXTOS: Record<FormatoConversion, { pregunta: string; accion: string; paso: string }> = {
+  txt: {
+    pregunta: "¿El extracto viene en uno o varios .txt?",
+    accion: "Convertir a Excel",
+    paso: "conversión de TXT",
+  },
+  excel: {
+    pregunta: "¿Tienes varios reportes diarios en Excel?",
+    accion: "Unificar en un Excel",
+    paso: "unificación de Excel",
+  },
+  csv: {
+    pregunta: "¿Tienes varios CSV diarios?",
+    accion: "Unificar en un CSV",
+    paso: "unificación de CSV",
+  },
+};
+
 function archivosLabel(n: number, formato: FormatoConversion): string {
   return `${n} ${FORMATO_LABEL[formato]}`;
 }
@@ -112,9 +130,7 @@ export function TxtConvertRow({
           <>
             <FileText className="size-3.5 shrink-0" aria-hidden />
             <span>
-              {formato === "txt"
-                ? "¿El extracto viene en uno o varios .txt?"
-                : "¿Tienes varios reportes diarios en Excel?"}
+              {TEXTOS[formato].pregunta}
             </span>
             <button
               type="button"
@@ -122,7 +138,7 @@ export function TxtConvertRow({
               disabled={disabled}
               className="font-medium text-foreground underline-offset-4 hover:underline disabled:opacity-50"
             >
-              {formato === "txt" ? "Convertir a Excel" : "Unificar en un Excel"}
+              {TEXTOS[formato].accion}
             </button>
           </>
         )}
@@ -141,7 +157,7 @@ export function TxtConvertRow({
           <>
             <FileText className="size-3.5 shrink-0 text-destructive" aria-hidden />
             <span role="alert" className="min-w-0 text-destructive">
-              Falló el paso 1 ({formato === "txt" ? "conversión de TXT" : "unificación de Excel"}):{" "}
+              Falló el paso 1 ({TEXTOS[formato].paso}):{" "}
               {conversion.error}
             </span>
             <div className="ml-auto flex items-center">
@@ -189,7 +205,7 @@ export function TxtConvertRow({
                 className={iconButton}
                 onClick={onDownload}
                 aria-label={`Descargar ${conversion.excel.name}`}
-                title="Descargar Excel"
+                title={formato === "csv" ? "Descargar CSV" : "Descargar Excel"}
               >
                 <Download className="size-3.5" aria-hidden />
               </Button>

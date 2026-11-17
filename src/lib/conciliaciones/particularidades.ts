@@ -1,7 +1,8 @@
 // Particularidades de UI por banco (país + slug de `conciliaciones.bancos`).
 // Las URLs de los webhooks viven en el servidor (`convertir-txt.ts`).
 
-export type FormatoConversion = "txt" | "excel";
+// csv: la unificación la hace la propia app (`unificar-csv.ts`), sin n8n.
+export type FormatoConversion = "txt" | "excel" | "csv";
 
 export interface ConversionConfig {
   /** Formato de los archivos diarios que n8n consolida en un solo Excel. */
@@ -26,6 +27,12 @@ const BANCOS_CON_CONVERSION: Record<string, ConversionConfig> = {
     formato: "excel",
     extractoFilename: "banamex-387-mexico_extracto.xlsx",
     extensiones: [...EXTENSIONES_EXCEL, ".csv"],
+  },
+  // Stripe: un CSV de pagos por día; se unifican en un solo CSV (el adapter lee CSV).
+  "MX:stripe-mexico": {
+    formato: "csv",
+    extractoFilename: "stripe-mexico_extracto.csv",
+    extensiones: [".csv"],
   },
 };
 
@@ -88,11 +95,14 @@ export const MAX_TXT_FILES = 31;
 export const FORMATO_LABEL: Record<FormatoConversion, string> = {
   txt: "TXT",
   excel: "Excel",
+  csv: "CSV",
 };
 
 /** Valor para el `accept` del input de archivos. */
 export function acceptDeConversion(config: ConversionConfig): string {
-  return config.formato === "txt" ? ".txt,text/plain" : config.extensiones.join(",");
+  if (config.formato === "txt") return ".txt,text/plain";
+  if (config.formato === "csv") return ".csv,text/csv";
+  return config.extensiones.join(",");
 }
 
 export function esArchivoDeConversion(filename: string, config: ConversionConfig): boolean {
@@ -103,6 +113,7 @@ export function esArchivoDeConversion(filename: string, config: ConversionConfig
 /** Mensaje cuando un archivo no corresponde al formato esperado. */
 export function mensajeFormatoInvalido(filename: string, config: ConversionConfig): string {
   if (config.formato === "txt") return `${filename} no es un archivo .txt.`;
+  if (config.formato === "csv") return `${filename} no es un archivo .csv.`;
   const lista = config.extensiones.join(", ");
   return config.extensiones.includes(".csv")
     ? `${filename} no es un archivo Excel o CSV (${lista}).`

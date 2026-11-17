@@ -28,6 +28,7 @@ export function getWebhookConversion(
   banco: string,
   formato: FormatoConversion,
 ): string | null {
+  if (formato === "csv") return null; // la unifica la app (unificar-csv.ts)
   return formato === "txt"
     ? (WEBHOOKS_TXT[`${pais}:${banco}`] ?? null)
     : (WEBHOOKS_UNIFICAR_EXCEL[pais] ?? null);

@@ -3,7 +3,7 @@ import type { TourStep } from "@/components/tour/como-usar";
 /** Recorrido "¿Cómo usar?" de la conciliación bancaria de un país. */
 export function tourConciliaciones(
   pais: string,
-  opts: { conversion?: "txt" | "excel"; domiciliacion?: boolean } = {},
+  opts: { conversion?: "txt" | "excel" | "csv"; domiciliacion?: boolean } = {},
 ): TourStep[] {
   const pasoTxt: TourStep[] = opts.domiciliacion
     ? [
@@ -35,7 +35,17 @@ export function tourConciliaciones(
               side: "bottom",
             },
           ]
-        : [];
+        : opts.conversion === "csv"
+          ? [
+              {
+                target: "txt",
+                title: "Varios CSV diarios (opcional)",
+                description:
+                  "Si tienes varios días, selecciona todos los CSV juntos. Se unen en un solo CSV que queda cargado como extracto bancario; un pago que aparezca en dos archivos se cuenta una vez. También puedes descargarlo. Si algún archivo tiene otras columnas, aparece listado debajo.",
+                side: "bottom",
+              },
+            ]
+          : [];
   return [
     {
       title: `Conciliación ${pais}`,
