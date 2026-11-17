@@ -167,12 +167,50 @@ export function ConciliacionesPageClient({
     };
   }, []);
 
+  const handleSelectDomi = React.useCallback(
+    (files: File[]): boolean => {
+      const config = banco ? getDomiciliacion(pais, banco.slug) : null;
+      if (!config) return false;
+      const invalido = files.find((f) => !esArchivoDomiciliacion(f.name));
+      if (invalido) {
+        toast.error(`${invalido.name} no es un TXT de domiciliación (.dom o .txt).`);
+        return false;
+      }
+      const grande = files.find((f) => f.size > MAX_FILE_SIZE_BYTES);
+      if (grande) {
+        toast.error(`${grande.name} supera el límite de 10 MB.`);
+        return false;
+      }
+      // El mismo archivo elegido dos veces cuenta una sola vez.
+      const unicos = files.filter(
+        (f, i) => files.findIndex((g) => g.name === f.name && g.size === f.size) === i,
+      );
+      if (unicos.length > config.max) {
+        toast.error(`Puedes subir hasta ${config.max} TXT de domiciliación a la vez.`);
+        return false;
+      }
+      setDomiFiles(unicos);
+      return true;
+    },
+    [banco, pais],
+  );
+
   const handleSelectPrincipal = React.useCallback((file: File) => {
+    // En bancos con domiciliación (Banamex 681) un .dom/.txt nunca es el extracto
+    // (Kyriba, Excel): se suma a los TXT de domiciliación en vez de reemplazarlo.
+    if (banco && getDomiciliacion(pais, banco.slug) && esArchivoDomiciliacion(file.name)) {
+      if (handleSelectDomi([...domiFiles, file])) {
+        toast.info(
+          `${file.name} se agregó a los TXT de domiciliación. Como extracto sube el Excel de Kyriba (hoja Maestra).`,
+        );
+      }
+      return;
+    }
     setPrincipalFile(file);
     setCurrentRun((prev) =>
       prev && (prev.status === "done" || prev.status === "error") ? null : prev,
     );
-  }, []);
+  }, [banco, pais, domiFiles, handleSelectDomi]);
 
   const handleSelectPrevio = React.useCallback((file: File) => {
     if (!isXlsxFilename(file.name)) {
@@ -208,29 +246,6 @@ export function ConciliacionesPageClient({
     setBanco(null);
     setCurrentRun(null);
   }, [resetTxt]);
-
-  const handleSelectDomi = React.useCallback(
-    (files: File[]) => {
-      const config = banco ? getDomiciliacion(pais, banco.slug) : null;
-      if (!config) return;
-      const invalido = files.find((f) => !esArchivoDomiciliacion(f.name));
-      if (invalido) {
-        toast.error(`${invalido.name} no es un TXT de domiciliación (.dom o .txt).`);
-        return;
-      }
-      const grande = files.find((f) => f.size > MAX_FILE_SIZE_BYTES);
-      if (grande) {
-        toast.error(`${grande.name} supera el límite de 10 MB.`);
-        return;
-      }
-      if (files.length > config.max) {
-        toast.error(`Puedes subir hasta ${config.max} TXT de domiciliación a la vez.`);
-        return;
-      }
-      setDomiFiles(files);
-    },
-    [banco, pais],
-  );
 
   const convertTxt = React.useCallback(
     async (bancoSel: BancoConciliacion, files: File[]) => {
@@ -772,6 +787,13 @@ export function ConciliacionesPageClient({
           <SoloLectura className="mr-auto">
             Tienes acceso de solo lectura: no puedes ejecutar conciliaciones.
           </SoloLectura>
+        )}
+        {!soloLectura && domiciliacion && domiFiles.length > 0 && !principalFile && (
+          <p className="mr-auto text-sm text-muted-foreground" role="status">
+            Los TXT de domiciliación se concilian junto con el extracto: sube el Excel de
+            Kyriba (hoja Maestra) en <span className="font-medium text-foreground">Extracto bancario</span> para
+            procesar.
+          </p>
         )}
         {conTxt && currentRun?.status === "error" && (
           <p className="mr-auto text-sm text-destructive" role="alert">

@@ -216,8 +216,20 @@ Slug `inbursa-103-mexico`. Excel *Estado de Cuenta Individual* con la línea `Cu
 - **Adapter n8n:** `Adapter | Inbursa 103 MX` (carpeta Contabilidad / Mexico), registrado en `bank_registry` con `cuentas = 036180120145500103` y `cuenta_netsuite = 11130101` (INBURSA 500103 $).
 - **Campos (marcados por la contadora):** `Fecha`, `Referencia`, `Ref. Externa`, `Referencia Leyenda`, `Cargo`, `Abono`, `Ordenante`, `Clave de Rastreo` (los de referencia van en *Descripcion*). Se descartan *SALDO INICIAL* y *Totales*.
 - **Sentido:** `Cargo` = salida (Débito, monto negativo); `Abono` = entrada (Crédito, positivo).
-- **Llaves:** `Referencia` y `Ref. Externa` (columnas resaltadas). En NetSuite la referencia aparece **dentro del memo** (Pago de factura, Diario), no idéntica: `E 10087025 SP15270` ↔ memo `E 10087025`; `Eva 5741` ↔ `DEVOLUCIÓN EVA-5741 …`.
-- **Cruce (en el *Normalize* del adapter):** primero `Referencia`; si no cruza, `Ref. Externa`. Coincidencia exacta, llave contenida en el memo (≥ 5 caracteres con dígitos) o memo como inicio de la llave, con el mismo sentido y monto. Lo que siga sin cruzar se intenta solo por coincidencia exacta aunque el monto difiera (sale *Diferencia de monto*). Una palabra sin dígitos (p. ej. `Devolucion`) no cuenta como llave. Al cruzar, el movimiento y el registro NetSuite reciben la misma llave; *Merge Results* del orquestador no cambia.
+- **Llaves:** `Referencia` y `Ref. Externa` (columnas resaltadas). Del lado de NetSuite se buscan en `memo`, `otherrefnum` y `custbody26` (*Número de autorización* del Pago de factura). En los pagos a proveedores, `Referencia` (`24703FS01224212319`) es idéntica a `custbody26`. En el resto la referencia aparece **dentro del memo** (Pago de factura, Diario), no idéntica: `E 10087025 SP15270` ↔ memo `E 10087025`; `Eva 5741` ↔ `DEVOLUCIÓN EVA-5741 …`.
+- **Cruce (en el *Normalize* del adapter).** Cada movimiento prueba primero `Referencia` y, si no cruza, `Ref. Externa`. Siempre exige el mismo sentido (cargo ↔ registro con crédito en la cuenta). Las reglas van en orden y cada una solo toma lo que las anteriores dejaron libre:
+
+  | Regla | Qué cruza | Columna *Cruce* |
+  |---|---|---|
+  | R1 | Llave exacta y mismo monto, 1 a 1 | `Referencia` / `Ref. Externa` |
+  | R2 | Llave exacta, **un movimiento contra varios registros** que suman el monto: todos los de esa llave o, si no suman, el subconjunto que sí. Ejemplo: `24703FS01226666718` es un cargo de 2,749.20 contra 27 *Pago de factura* con el mismo `custbody26`. | `Referencia · 27 registros` |
+  | R3 | Llave contenida en el memo (≥ 5 caracteres con dígitos) o memo como inicio de la llave, con el mismo monto, 1 a 1 | `Referencia` / `Ref. Externa` |
+  | R4 | Llave exacta con **monto distinto**: el registro o el grupo de esa llave que más se acerque (sale *Diferencia de monto*) | `… · monto distinto` |
+  | R5 | **Sin llave**: mismo monto exacto, fecha a ≤ 3 días y único en los dos lados (un solo movimiento y un solo registro posibles). Ejemplo: banco "Devolucion" 776.00 ↔ Diario `DEVOLUCIÓN EVA-5854 …` 776.00. Si hay dos posibles, no cruza. | `Monto y fecha (sin referencia)` |
+
+  Una palabra sin dígitos (p. ej. `Devolucion`) no cuenta como llave. Al cruzar, el movimiento y sus registros reciben la misma llave. *Merge Results* del orquestador no cambia: con varios registros los muestra como `(1/27) … (27/27)` y compara la suma. La columna *Cruce* del Excel dice qué regla cruzó cada movimiento, para que la contadora revise primero los de R4 y R5.
+- **Lo que no cruza (noviembre 2026):** los traspasos internos ("Abono por traspaso"), comisiones e IVA, y las transferencias `24703TR…` de viáticos y nómina (`EVA…`, `SP…`) no tienen registro en NetSuite en la cuenta 11130101 en esas fechas. Quedan como *Solo en extracto*.
+- **No cubierto:** varios movimientos del banco contra **un** registro NetSuite (un pago partido en dos cargos). *Merge Results* lo marcaría como *Flow Id repetido*. No apareció en los datos; habría que cambiar el orquestador.
 
 ## Asientos de diario
 
@@ -251,14 +263,28 @@ Con el archivo de octubre: 2.078.018 líneas → 535 grupos; 382 cuentas cuadran
 - `GET /api/conciliaciones/asientos?job=` → `202` pendiente | el Excel con el header `X-Resumen` (JSON `encodeURIComponent`) | `{ error, code }`. Al leer el resultado borra el Excel, el estado y los archivos de entrada (lista en `{usuario}/resultado/{jobId}.entradas`); lo huérfano lo borra la limpieza diaria.
 - Lógica: `src/lib/conciliaciones/asientos.ts` (servidor) y `asientos-shared.ts` (límites y tipos). UI: `src/components/conciliaciones/asientos/asientos-page.tsx`.
 
-### Workflow n8n: `Conciliación | Asientos de diario vs Balance (Webhook)`
+### Workflow n8n: `Reconciliation | Journal Entries vs Balance (Webhook)`
 
-Proyecto Contabilidad › carpeta Conciliaciones, webhook `POST /webhook/conciliacion-asientos`. Mismo patrón asíncrono que `/webhook/reconciliation`: *Responder recibido* (202) → … → *Subir Excel* → *Subir estado* `{ ok, fileName, cuentas, cruzan, redondeo, noCruzan, sinMovimiento, soloBalance, soloAsientos, lineas, difDebito, difCredito }`; cualquier fallo va a *Subir error* `{ ok: false, error }`.
+Proyecto Contabilidad › carpeta Conciliaciones, webhook `POST /webhook/conciliacion-asientos`. Mismo patrón asíncrono que `/webhook/reconciliation`: *Respond Received* (202) → … → *Upload Excel* → *Upload Status* `{ ok, fileName, cuentas, cruzan, redondeo, noCruzan, sinMovimiento, soloBalance, soloAsientos, lineas, difDebito, difCredito }`; cualquier fallo va a *Upload Error* `{ ok: false, error }`.
 
-1. **Validar entrada** → **Descargar balance** → **Leer balance**: lector propio de `.xlsx`/`.csv` (n8n Cloud no trae librerías de Excel; descomprime con `zlib` o con un inflate en JS si no está permitido). Avisa si el encabezado del balance dice otro mes o si el balance no cuadra.
-2. **NetSuite** (vía el sub-flujo `NetSuite | SuiteQL Query`): *Consulta periodo* (`accountingperiod` del mes, sin trimestres/años) → *Consulta movimientos*: `SUM(tal.debit)`, `SUM(tal.credit)`, `COUNT(*)` de `transactionaccountingline` con `tal.posting = 'T'`, `t.postingperiod = <id>` y `tl.subsidiary = <id>`, agrupado por `tal.account, t.type` (sin unir `account`: así tarda ~40 s; con el join o con el periodo como subconsulta pasa de 6 min) → *Consulta cuentas* (número, nombre y tipo de las cuentas usadas) → *Unir NetSuite*.
-3. **Archivo**: *Descargar asientos* → *Leer asientos*: desde el portal recibe el resumen del navegador (columna `Líneas`) y usa `lecturaCliente`; también acepta un archivo crudo (≤ 50 MB) con `Número Cuenta` / `Cuenta Contable`, `Débito COP` / `Débito`, `Crédito COP` / `Crédito` (o `Monto`), `Código Tipo` / `Tipo de documento`, `Fecha` / `Fecha documento` y `Subsidiaria` en cualquier hoja.
-4. **Conciliar y armar Excel**: cruza por número de cuenta (las filas sin número, como `VAT on Sales CO`, por nombre) y arma el `.xlsx` a mano (ZIP sin compresión).
+1. **Validate Input** → **Download Balance** → **Read Balance**: lector propio de `.xlsx`/`.csv` (n8n Cloud no trae librerías de Excel; descomprime con `zlib` o con un inflate en JS). Avisa si el encabezado del balance dice otro mes o si el balance no cuadra.
+2. **NetSuite** (vía el sub-flujo `NetSuite | SuiteQL Query`):
+   - *Build Period Query* → *SuiteQL Period*: `accountingperiod` del mes (sin trimestres ni años).
+   - *Build Transactions Query* → *SuiteQL Transactions*: `SUM(tal.debit)`, `SUM(tal.credit)`, `COUNT(*)` de `transactionaccountingline` con `tal.posting = 'T'`, **`tal.account IS NOT NULL`**, `t.postingperiod = <id>` y `tl.subsidiary = <id>`, agrupado por `tal.account, t.type` (~40 s; con el join a `account` o el periodo como subconsulta pasa de 6 min). Sin el filtro de cuenta entraban ~14.000 líneas de **artículos de descuento** de facturas y notas crédito que no tienen cuenta ni van al balance.
+   - *Build Accounts Query* → *SuiteQL Accounts* → *Merge NetSuite Data*: número, nombre y tipo de cada cuenta.
+   - *Build Documents Query* → *SuiteQL Documents* → *Attach Documents*: para cada cuenta que no cruza con el balance, sus 5 documentos modificados más recientemente (`ROW_NUMBER() OVER (PARTITION BY cuenta ORDER BY lastmodifieddate DESC)`, ~15 s).
+3. **Archivo**: *Download Journal Entries* → *Read Journal Entries*: desde el portal recibe el resumen del navegador (columna `Líneas`) y usa `lecturaCliente`; también acepta un archivo crudo (≤ 50 MB) con `Número Cuenta` / `Cuenta Contable`, `Débito COP` / `Débito`, `Crédito COP` / `Crédito` (o `Monto`), `Código Tipo` / `Tipo de documento`, `Fecha` / `Fecha documento` y `Subsidiaria` en cualquier hoja.
+4. **Reconcile and Build Excel**: cruza por número de cuenta (las filas sin número, como `VAT on Sales CO`, por nombre) y arma el `.xlsx` a mano (ZIP sin compresión).
+
+### NetSuite vs Excel de asientos: por qué pueden diferir
+
+Validado con octubre 2026 · SIIGO S.A.S contra el Excel que la contadora da por correcto (0 diferencias):
+
+| Causa | Efecto en el modo NetSuite | Qué hace el reporte |
+|---|---|---|
+| El rol de la integración **no ve transferencias de fondos** (`Transfer`): SuiteQL no las devuelve ni buscándolas por ID. | Faltan los traslados entre bancos y el fondo (7 cuentas). | Lo dice en la explicación. **Solución: agregar al rol de la integración el permiso *Transferir fondos* (Ver).** Mientras tanto, usar el Excel. |
+| NetSuite se consulta **en vivo**; el balance y el Excel son una foto del momento en que se exportaron. | Asientos creados o modificados después (p. ej. *CIERRE DE CUENTAS RETE OCT2026*, creado el 12/11 09:44) salen como diferencia. | Columna *Documentos recientes en NetSuite* en Comparativo; si un documento explica la diferencia al peso, la explicación lo nombra (número, glosa, creado/modificado y por quién). En octubre: 36 de 48 cuentas. |
+| Líneas de artículos de descuento sin cuenta contable. | Antes salían como *(sin cuenta)* por ~3.330 millones. | Corregido: se excluyen. |
 
 ### Lógica del cruce y Excel resultante
 
@@ -270,7 +296,7 @@ Hojas: **Resumen** (parámetros, avisos, conteos, totales y casos), **Conciliaci
 
 ### Hallazgos con octubre 2026 (SIIGO S.A.S)
 
-**Con NetSuite como fuente**: de 465 cuentas, 336 cruzan (3 por redondeo), 80 sin movimiento y 49 no cruzan. **Con el Excel de Auditoría** (el mismo mes) no queda ninguna diferencia, lo que confirma que el faltante es de la consulta SuiteQL y no de la contabilidad. Las diferencias grandes son de bancos (Davivienda, Bancolombia, Bogotá, fondo de inversión): **SuiteQL no devuelve ninguna transacción tipo `Transfer`** en el periodo, así que el rol de la integración de NetSuite probablemente no tiene permiso para *Transferir fondos*. Las retenciones (2365xx/2367xx/2368xx) aparecen en los asientos con débito = crédito y en el balance solo con el crédito. Hay además ~3.300 millones en líneas contables sin cuenta (`(sin cuenta)`).
+**Con NetSuite como fuente**: de 464 cuentas, 336 cruzan (3 por redondeo), 80 sin movimiento y 48 no cruzan, todas con su causa (ver la tabla de arriba). **Con el Excel de Auditoría** (el mismo mes) no queda ninguna diferencia, lo que confirma que el faltante es de la consulta SuiteQL y no de la contabilidad. Las diferencias grandes son de bancos (Davivienda, Bancolombia, Bogotá, fondo de inversión): **SuiteQL no devuelve ninguna transacción tipo `Transfer`** en el periodo, así que el rol de la integración de NetSuite probablemente no tiene permiso para *Transferir fondos*. Las retenciones (2365xx/2367xx/2368xx) aparecen en los asientos con débito = crédito y en el balance solo con el crédito.
 
 ## Errores
 

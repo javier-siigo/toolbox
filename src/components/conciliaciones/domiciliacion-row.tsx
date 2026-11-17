@@ -5,6 +5,7 @@ import { FileText, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/uploads";
+import { cn } from "@/lib/utils";
 
 interface DomiciliacionRowProps {
   files: File[];
@@ -37,11 +38,31 @@ export function DomiciliacionRow({
   };
 
   const total = files.reduce((sum, f) => sum + f.size, 0);
+  const [dragOver, setDragOver] = React.useState(false);
+
+  // Arrastrar los TXT sobre la fila: sin esto el navegador abre el archivo.
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!disabled) setDragOver(true);
+  };
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (disabled) return;
+    const dropped = Array.from(e.dataTransfer.files ?? []);
+    if (dropped.length > 0) onSelect(dropped);
+  };
 
   return (
     <div
       data-tour="txt"
-      className="flex flex-col gap-1 rounded-md bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground"
+      onDragOver={onDragOver}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      className={cn(
+        "flex flex-col gap-1 rounded-md bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
+        dragOver && "ring-2 ring-primary/40",
+      )}
     >
       <input
         ref={inputRef}
