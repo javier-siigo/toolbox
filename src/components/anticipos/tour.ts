@@ -11,7 +11,7 @@ export const TOUR_ANTICIPOS: TourStep[] = [
     target: "indicadores",
     title: "El estado de un vistazo",
     description:
-      "Cuántos anticipos están vencidos, cuántos siguen sin resolver y por qué valor, las devoluciones, los legalizados y los de excolaboradores. Haz clic en uno para filtrar la tabla.",
+      "Cuántos anticipos están vencidos, cuántos siguen sin legalizar y por qué valor, las devoluciones, los legalizados y los de excolaboradores. Haz clic en uno para filtrar la tabla.",
     side: "bottom",
   },
   {
@@ -38,7 +38,7 @@ export const TOUR_ANTICIPOS: TourStep[] = [
     target: "filtros",
     title: "Filtra la tabla",
     description:
-      "Filtra por el semáforo (vencidos, en plazo, resueltos), por lo que falta, por la observación de seguimiento o deja solo los excolaboradores. Limpiar filtros vuelve a la vista completa.",
+      "Filtra por el semáforo (vencidos, en plazo, legalizados), por lo que falta, por la observación de seguimiento o deja solo los excolaboradores. Limpiar filtros vuelve a la vista completa.",
     side: "bottom",
   },
   {

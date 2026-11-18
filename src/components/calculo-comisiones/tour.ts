@@ -5,48 +5,48 @@ export const TOUR_COMISIONES: TourStep[] = [
   {
     title: "Cierre mensual de comisiones",
     description:
-      "Las comisiones de cada mes se llevan al gasto al mismo ritmo en que se reconoce el ingreso de las facturas F93 y F94 de ese mes. El cierre se hace en 4 pasos y termina con los asientos para NetSuite.",
+      "Las comisiones de cada mes se llevan al gasto al mismo ritmo en que se reconoce el ingreso de las facturas F93 y F94 de ese mes. Solo tienes que traer tres datos; el resultado se calcula solo.",
   },
   {
     target: "periodo",
     title: "Elige el mes",
     description:
-      "Con las flechas o la lista. Los meses que ya tienen un cálculo guardado vienen marcados en la lista.",
+      "Con las flechas o la lista. Los meses que ya tienen un cierre guardado vienen marcados en la lista.",
     side: "bottom",
   },
   {
-    target: "siguiente",
-    title: "La banda Siguiente",
+    target: "dato-comisiones",
+    title: "1. Comisiones del mes",
     description:
-      "Siempre dice la única acción que sigue y cuántos pasos faltan; su botón te lleva a ese paso. Al final, aquí aparecen Exportar Excel y Guardar cierre.",
+      "El valor de cada concepto de comisión con su cuenta de gasto. Si el mes está vacío, puedes copiar el mes anterior y ajustarlo.",
     side: "bottom",
   },
   {
-    target: "paso-1",
-    title: "1. Comisiones causadas",
+    target: "dato-facturacion",
+    title: "2. Facturación F93/F94",
     description:
-      "El valor de cada concepto de comisión del mes con su cuenta de gasto. Si el mes está vacío, puedes copiar los valores del mes anterior y ajustarlos.",
+      "Las facturas y notas crédito F93/F94 emitidas en el mes según NetSuite. Pasa el mouse por los términos subrayados para ver qué significan.",
     side: "bottom",
   },
   {
-    target: "paso-2",
-    title: "2. Facturación del mes",
-    description:
-      "Las facturas y notas crédito F93/F94 emitidas en el mes según NetSuite. El neto es la base del porcentaje de esta cohorte.",
-    side: "bottom",
-  },
-  {
-    target: "paso-3",
+    target: "dato-informe",
     title: "3. Informe diferido",
     description:
-      "Arrastra el Excel mensual de contabilidad a cualquier parte de la página o elígelo aquí. Se lee en tu navegador y da el ingreso reconocido en el mes por cohorte.",
+      "Arrastra el Excel mensual a cualquier parte de la página o súbelo desde aquí. Se lee en tu navegador.",
+    side: "bottom",
+  },
+  {
+    target: "resultado",
+    title: "Resultado del mes",
+    description:
+      "El gasto del mes en una cifra. \"¿Por qué este número?\" muestra la cuenta. A la derecha, lo que hay que revisar: cada punto trae un botón que te lleva a resolverlo.",
     side: "top",
   },
   {
-    target: "paso-4",
-    title: "4. Revisión y asientos",
+    target: "detalle",
+    title: "Ver detalle",
     description:
-      "El gasto por cohorte, los controles y los asientos para NetSuite, cada uno con Copiar para pegarlo. Resuelve los controles en error y guarda el cierre desde la banda.",
+      "El cálculo por cohorte, los asientos para NetSuite con su botón Copiar, todos los controles y los comprobantes del informe.",
     side: "top",
   },
   {

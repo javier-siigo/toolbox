@@ -12,7 +12,6 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,35 +26,30 @@ import {
 import type { Asiento, Control, EstadoControl } from "@/lib/comisiones/types";
 import { cn } from "@/lib/utils";
 
-import { formatCentavos, formatFraction, formatImporte, formatShortDateTime } from "./format";
+import { formatCentavos, formatFraction, formatImporte } from "./format";
 import { TONO_GRUPO, type TonoGrupo } from "./grupo";
 
 interface RevisionPanelProps {
   cierre: CierreCalculo;
   controles: Control[];
-  /** "informe": del archivo cargado; "registrado": cierre guardado o histórico. */
-  fuente: "informe" | "registrado";
-  guardadoEn: string | null;
-  sinGuardar: boolean;
-  /** Hay un informe cargado que se puede guardar (las acciones viven en la banda). */
-  puedeGuardar: boolean;
+  /** Pestaña abierta; la controla la página para que las tareas lleven a ella. */
+  vista: VistaDetalle;
+  onVista: (vista: VistaDetalle) => void;
   /** Detalle por comprobante; solo existe con el informe cargado. */
   comprobantes?: React.ReactNode;
 }
 
-type Vista = "cohortes" | "asientos" | "controles" | "comprobantes";
+export type VistaDetalle = "cohortes" | "asientos" | "controles" | "comprobantes";
 
-/** Paso 4: cifras del mes, cálculo por cohorte, asientos y controles. */
+/** Detalle del cierre: cálculo por cohorte, asientos, controles y comprobantes. */
 export function RevisionPanel({
   cierre,
   controles,
-  fuente,
-  guardadoEn,
-  sinGuardar,
-  puedeGuardar,
+  vista,
+  onVista,
   comprobantes,
 }: RevisionPanelProps) {
-  const [vista, setVista] = useState<Vista>("cohortes");
+  const setVista = onVista;
   const anios = [...new Set(cierre.cohortes.map((c) => anioDe(c.cohorte)))].sort();
   // Por defecto, el año del cierre; la elección se olvida al cambiar de mes.
   const [eleccion, setEleccion] = useState<{ periodo: string; anio: string } | null>(null);
@@ -69,41 +63,7 @@ export function RevisionPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        {puedeGuardar ? (
-          <EstadoGuardado sinGuardar={sinGuardar} guardadoEn={guardadoEn} />
-        ) : (
-          <Badge variant="outline" className="text-muted-foreground">
-            {guardadoEn ? `Guardado ${formatShortDateTime(guardadoEn)}` : "Registrado desde el Excel"}
-          </Badge>
-        )}
-        {fuente === "registrado" && (
-          <span>Calculado con el ingreso ya registrado. Carga el informe para recalcular.</span>
-        )}
-        {cierre.ajustesCierre !== 0 && (
-          <span>
-            Incluye {formatCentavos(cierre.ajustesCierre)} de ajuste por cierre de cohorte.
-          </span>
-        )}
-      </div>
-
-      {errores.length > 0 && (
-        <div
-          role="alert"
-          className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm dark:bg-destructive/10"
-        >
-          {errores.map((c) => (
-            <span key={c.id} className="flex items-start gap-2 text-destructive">
-              <XCircle className="mt-0.5 size-4 shrink-0" />
-              <span>
-                <span className="font-medium">{c.titulo}.</span> {c.detalle}
-              </span>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)} className="gap-4">
+      <Tabs value={vista} onValueChange={(v) => setVista(v as VistaDetalle)} className="gap-4">
         <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="cohortes">Cálculo por cohorte</TabsTrigger>
           <TabsTrigger value="asientos">
@@ -646,40 +606,6 @@ function AsientosLista({ asientos, anio }: { asientos: Asiento[]; anio: string |
 
 // ---------------------------------------------------------------------------
 // Estado y controles
-
-function EstadoGuardado({
-  sinGuardar,
-  guardadoEn,
-}: {
-  sinGuardar: boolean;
-  guardadoEn: string | null;
-}) {
-  const pendiente = !guardadoEn || sinGuardar;
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "gap-1.5",
-        pendiente
-          ? "border-amber-200/60 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300"
-          : "border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300",
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          pendiente ? "bg-amber-500" : "bg-emerald-500",
-        )}
-      />
-      {!guardadoEn
-        ? "Sin guardar"
-        : sinGuardar
-          ? "Cambios sin guardar"
-          : `Guardado ${formatShortDateTime(guardadoEn)}`}
-    </Badge>
-  );
-}
 
 /** Muestra lo que requiere atención; los controles correctos quedan resumidos en una línea. */
 function ControlesList({ controles }: { controles: Control[] }) {

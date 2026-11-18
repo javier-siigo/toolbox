@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, Download, Loader2, Save, Upload } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronDown, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { ComoUsar } from "@/components/tour/como-usar";
 import { Button } from "@/components/ui/button";
 import { SoloLectura } from "@/components/common/solo-lectura";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import {
   actualizarConcepto,
   crearConcepto,
@@ -40,13 +41,15 @@ import {
 import { BasePanel, type BaseMes } from "./base-panel";
 import { ConceptosPanel } from "./conceptos-panel";
 import { DocumentosTable } from "./documentos-table";
+import { DatoTile } from "./dato-tile";
 import { formatCentavos, formatNumber, formatPesos } from "./format";
-import { Paso, ResumenPaso, type EstadoPaso } from "./paso";
+import { AyudaDato, Termino } from "./glosario";
 import { PeriodoPicker } from "./periodo-picker";
-import { RevisionPanel } from "./revision-panel";
+import { RevisionPanel, type VistaDetalle } from "./revision-panel";
 import { InformePanel } from "./informe-panel";
+import { ResultadoCard } from "./resultado-card";
 import { SeguimientoTab } from "./seguimiento-tab";
-import { SiguienteBand, type SenalSiguiente } from "./siguiente-band";
+import { construirTareas, type DatoMes, type DestinoTarea } from "./tareas";
 import { TOUR_COMISIONES } from "./tour";
 import { useInformeDiferido } from "./use-informe-diferido";
 
@@ -403,113 +406,59 @@ export function CalculoComisionesPageClient({
     }
   };
 
-  // --- Pasos del cierre ----------------------------------------------------
+  // --- Datos del mes ------------------------------------------------------
 
   const mes = periodoLabel(periodo).toLowerCase();
   const netoMes = baseMes.F94.facturas - baseMes.F94.notasCredito + baseMes.F93.facturas - baseMes.F93.notasCredito;
   const leyendo = lectura.estado === "leyendo";
-  const listo = [
-    pool !== 0,
-    netoMes > 0,
-    !!archivo || tieneRegistro,
-    !!cierre && ((!!guardado && !sinGuardar) || (!archivo && tieneRegistro)),
-  ];
-  const actual = listo.findIndex((x) => !x);
-  const estadoDe = (i: number): EstadoPaso =>
-    listo[i] ? "hecho" : i === actual ? "actual" : "pendiente";
-
-  // Abierto: el paso actual y la revisión cuando hay cálculo; el resto a pedido.
-  const [abiertos, setAbiertos] = useState<Record<number, boolean>>({});
-  useEffect(() => setAbiertos({}), [periodo]);
-  const estaAbierto = (i: number) => abiertos[i] ?? (i === actual || (i === 3 && !!cierre));
-  const toggle = (i: number) => setAbiertos((a) => ({ ...a, [i]: !estaAbierto(i) }));
-
-  const irA = (i: number) => {
-    setAbiertos((a) => ({ ...a, [i]: true }));
-    requestAnimationFrame(() =>
-      document.getElementById(`paso-${i + 1}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
+  const listo: Record<DatoMes, boolean> = {
+    comisiones: pool !== 0,
+    facturacion: netoMes > 0,
+    informe: !!archivo || tieneRegistro,
   };
-  const irBoton = (i: number, texto = "Ir al paso") => (
-    <Button size="sm" variant="secondary" onClick={() => irA(i)}>
-      <ArrowDown className="size-3.5" />
-      {texto}
-    </Button>
-  );
+  const faltante = DATOS.find((d) => !listo[d]) ?? null;
+  const listos = DATOS.filter((d) => listo[d]).length;
 
-  const errores = controles.filter((c) => c.estado === "error");
-  let senal: SenalSiguiente;
-  if (leyendo) {
-    senal = {
-      tipo: "trabajando",
-      mensaje: `Leyendo el informe diferido de ${mes}`,
-      detalle: "El archivo se procesa en tu navegador; puedes seguir revisando los otros pasos.",
-    };
-  } else if (actual === 0) {
-    senal = {
-      tipo: "siguiente",
-      mensaje: `Registra las comisiones causadas en ${mes}`,
-      detalle: "Valor por concepto, con su cuenta de gasto. Son la cohorte del mes.",
-      accion: irBoton(0),
-    };
-  } else if (actual === 1) {
-    senal = {
-      tipo: "siguiente",
-      mensaje: `Ingresa la facturación F93/F94 de ${mes}`,
-      detalle: "Facturas y notas crédito emitidas según NetSuite. El neto es la base del % de esta cohorte.",
-      accion: irBoton(1),
-    };
-  } else if (actual === 2) {
-    senal = {
-      tipo: "siguiente",
-      mensaje: `Carga el informe diferido de ${mes}`,
-      detalle: "Arrástralo a cualquier parte de la página. Da el ingreso del mes de cada cohorte.",
-      accion: irBoton(2),
-    };
-  } else if (actual === 3 && errores.length > 0) {
-    senal = {
-      tipo: "siguiente",
-      mensaje: `Resuelve ${errores.length === 1 ? "1 control en error" : `${errores.length} controles en error`} antes de guardar`,
-      detalle: errores.map((e) => e.titulo).join(" · "),
-      accion: irBoton(3, "Ver controles"),
-    };
-  } else if (actual === 3 && cierre) {
-    senal = {
-      tipo: "siguiente",
-      mensaje: "Revisa el cálculo y guarda el cierre",
-      detalle: `Gasto del mes ${formatCentavos(cierre.gastoMes)} · ${cierre.asientos.length} asientos cuadrados`,
-      accion: (
-        <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={() => void onExportar()} disabled={exportando}>
-            {exportando ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-            Exportar Excel
-          </Button>
-          <Button size="sm" onClick={() => void onGuardar()} disabled={soloLectura || guardando || !sinGuardar}>
-            {guardando ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-            Guardar cierre
-          </Button>
-        </div>
-      ),
-    };
-  } else {
-    senal = {
-      tipo: "listo",
-      mensaje: guardado
-        ? `Cierre de ${mes} guardado`
-        : `${periodoLabel(periodo)} está registrado desde el Excel de contabilidad`,
-      detalle: cierre
-        ? `Exporta el Excel para registrar los ${cierre.asientos.length} asientos en NetSuite.`
-        : "Sin cálculo para este mes.",
-      accion: cierre ? (
-        <Button size="sm" variant="secondary" onClick={() => void onExportar()} disabled={exportando}>
-          {exportando ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-          Exportar Excel
-        </Button>
-      ) : undefined,
-    };
-  }
+  // El editor abierto. Al cambiar de mes se abre el primer dato que falta; después
+  // manda lo que elija el usuario (no salta a otro dato mientras se escribe).
+  const [eleccion, setEleccion] = useState<{ periodo: string; dato: DatoMes | null }>(() => ({
+    periodo,
+    dato: faltante,
+  }));
+  if (eleccion.periodo !== periodo) setEleccion({ periodo, dato: faltante });
+  const abierto = leyendo ? "informe" : eleccion.dato;
+  const abrir = (dato: DatoMes | null) => setEleccion({ periodo, dato });
+  const toggleDato = (dato: DatoMes) => abrir(abierto === dato ? null : dato);
+  const cargar = (file: File) => {
+    abrir("informe");
+    leer(file);
+  };
 
-  const TITULOS = ["Comisiones causadas", "Facturación del mes", "Informe diferido", "Revisión y asientos"];
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
+  const [vista, setVista] = useState<VistaDetalle>("cohortes");
+
+  const irA = (id: string) =>
+    requestAnimationFrame(() =>
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+
+  const onTarea = (destino: DestinoTarea) => {
+    if (destino.tipo === "dato") {
+      abrir(destino.dato);
+      irA("datos-mes");
+    } else if (destino.tipo === "detalle") {
+      setVista(destino.vista);
+      setDetalleAbierto(true);
+      irA("detalle-mes");
+    } else {
+      setPeriodo(destino.periodo);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const tareas = useMemo(() => (cierre ? construirTareas(controles, cierre) : []), [controles, cierre]);
+
+  const sinCuenta = conceptos.filter((c) => !c.cuenta && (valoresPeriodo.get(c.id) ?? 0) !== 0).length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -551,9 +500,10 @@ export function CalculoComisionesPageClient({
             <h1 className="text-base font-semibold tracking-tight text-foreground">
               Cálculo de Comisiones
             </h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">
+            <p className="max-w-2xl text-pretty text-sm text-muted-foreground">
               Las comisiones de cada mes se llevan al gasto al mismo ritmo en que se
-              reconoce el ingreso de las facturas F93 y F94 emitidas ese mes.
+              reconoce el ingreso de sus facturas F93 y F94. Trae los tres datos del mes y
+              el resultado se calcula solo.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3 xl:flex-nowrap xl:justify-end">
@@ -573,119 +523,257 @@ export function CalculoComisionesPageClient({
           </div>
         </header>
 
-        <TabsContent value="cierre" className="flex flex-col gap-3">
-          <SiguienteBand
-            senal={senal}
-            pasoActual={actual === -1 ? null : actual + 1}
-            pasos={TITULOS.map((titulo, i) => ({ titulo, hecho: listo[i]!, actual: i === actual }))}
-          />
+        <TabsContent value="cierre" className="flex flex-col gap-8 pt-5">
+          <section id="datos-mes" aria-labelledby="datos-titulo" className="flex scroll-mt-20 flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 id="datos-titulo" className="text-sm font-semibold">
+                Lo que necesitas traer de {mes}
+              </h2>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                {listos} de {DATOS.length} listos
+              </span>
+            </div>
 
-          <Paso
-            n={1}
-            titulo={TITULOS[0]!}
-            tipo="gasto"
-            estado={estadoDe(0)}
-            descripcion={`Comisiones del mes por concepto, con su cuenta de gasto`}
-            resumen={
-              pool !== 0 ? (
-                <ResumenPaso valor={formatPesos(pool)} detalle={`${valoresPeriodo.size} conceptos`} />
-              ) : undefined
-            }
-            abierto={estaAbierto(0)}
-            onToggle={() => toggle(0)}
-          >
-            <fieldset disabled={soloLectura} className="contents">
-            <ConceptosPanel
-              periodo={periodo}
-              conceptos={conceptos}
-              valores={valoresPeriodo}
-              valoresAnterior={valoresAnterior}
-              pool={pool}
-              onValor={(id, v) => void onValor(id, v)}
-              onCrear={onCrear}
-              onRenombrar={(id, nombre) => void patchConcepto(id, { nombre })}
-              onCuenta={(id, cuenta) => void patchConcepto(id, { cuenta: cuenta.trim() || null })}
-              onActivo={(id, activo) => void patchConcepto(id, { activo })}
-              onCopiarAnterior={() => void onCopiarAnterior()}
-            />
-            </fieldset>
-          </Paso>
-
-          <Paso
-            n={2}
-            titulo={TITULOS[1]!}
-            tipo="ingreso"
-            estado={estadoDe(1)}
-            descripcion="Facturas y notas crédito F93/F94 emitidas en el mes, según NetSuite"
-            resumen={
-              netoMes !== 0 ? <ResumenPaso valor={formatPesos(netoMes)} detalle="Neto F93 + F94" /> : undefined
-            }
-            abierto={estaAbierto(1)}
-            onToggle={() => toggle(1)}
-          >
-            <fieldset disabled={soloLectura} className="contents">
-              <BasePanel base={baseMes} onChange={(p, c, v) => void onBase(p, c, v)} />
-            </fieldset>
-          </Paso>
-
-          <Paso
-            n={3}
-            titulo={TITULOS[2]!}
-            tipo="ingreso"
-            estado={leyendo ? "actual" : estadoDe(2)}
-            descripcion="Excel mensual: el ingreso F93/F94 reconocido en el mes, por cohorte"
-            resumen={
-              archivo ? (
-                <ResumenPaso
-                  texto
-                  valor={archivo.archivoNombre}
-                  detalle={`${formatNumber(archivo.documentos.length)} comprobantes`}
-                />
-              ) : tieneRegistro ? (
-                <ResumenPaso
-                  texto
-                  valor="Ingreso registrado"
-                  detalle={guardado ? "Cierre guardado" : "Excel de contabilidad"}
-                />
-              ) : undefined
-            }
-            abierto={estaAbierto(2) || leyendo}
-            onToggle={() => toggle(2)}
-          >
-            <InformePanel lectura={lectura} guardado={guardado} onArchivo={leer} onQuitar={limpiar} />
-          </Paso>
-
-          <Paso
-            n={4}
-            titulo={TITULOS[3]!}
-            estado={estadoDe(3)}
-            descripcion="Gasto por cohorte, asientos para NetSuite y controles"
-            resumen={
-              cierre ? (
-                <ResumenPaso valor={formatCentavos(cierre.gastoMes)} detalle="Gasto del mes" />
-              ) : undefined
-            }
-            abierto={estaAbierto(3)}
-            onToggle={() => toggle(3)}
-          >
-            {cierre ? (
-              <RevisionPanel
-                cierre={cierre}
-                controles={controles}
-                fuente={archivo ? "informe" : "registrado"}
-                guardadoEn={guardado?.createdAt ?? null}
-                sinGuardar={sinGuardar}
-                puedeGuardar={!soloLectura && !!archivo}
-                comprobantes={
-                  archivo ? <DocumentosTable documentos={archivo.documentos} periodo={periodo} /> : undefined
+            <div className="grid gap-3 md:grid-cols-3">
+              <DatoTile
+                id="comisiones"
+                titulo="Comisiones del mes"
+                tipo="gasto"
+                estado={listo.comisiones ? "listo" : "falta"}
+                siguiente={faltante === "comisiones"}
+                valor={pool !== 0 ? formatPesos(pool) : undefined}
+                detalle={
+                  pool === 0
+                    ? `Lo causado en ${mes}, por concepto`
+                    : sinCuenta > 0
+                      ? `${valoresPeriodo.size} conceptos · ${sinCuenta === 1 ? "1 sin cuenta" : `${sinCuenta} sin cuenta`}`
+                      : `${valoresPeriodo.size} conceptos, todos con cuenta`
                 }
+                accion={listo.comisiones ? "Ver o editar" : "Registrar"}
+                abierto={abierto === "comisiones"}
+                onToggle={() => toggleDato("comisiones")}
               />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                El cálculo aparece cuando el informe diferido de {mes} esté cargado.
-              </p>
+              <DatoTile
+                id="facturacion"
+                titulo={
+                  <>
+                    Facturación <Termino t="f93f94">F93/F94</Termino>
+                  </>
+                }
+                tipo="ingreso"
+                estado={listo.facturacion ? "listo" : "falta"}
+                siguiente={faltante === "facturacion"}
+                valor={netoMes !== 0 ? formatPesos(netoMes) : undefined}
+                detalle={netoMes !== 0 ? "Neto: facturas menos notas crédito" : `Lo facturado en ${mes}, según NetSuite`}
+                accion={listo.facturacion ? "Ver o editar" : "Ingresar"}
+                abierto={abierto === "facturacion"}
+                onToggle={() => toggleDato("facturacion")}
+              />
+              <DatoTile
+                id="informe"
+                titulo={<Termino t="informe">Informe diferido</Termino>}
+                tipo="ingreso"
+                estado={leyendo ? "leyendo" : listo.informe ? "listo" : "falta"}
+                siguiente={faltante === "informe"}
+                valorTexto
+                valor={
+                  archivo ? archivo.archivoNombre : leyendo ? lectura.archivo.name : tieneRegistro ? "Ingreso ya registrado" : undefined
+                }
+                detalle={
+                  archivo
+                    ? `${formatNumber(archivo.documentos.length)} comprobantes F93/F94`
+                    : leyendo
+                      ? "Se lee en tu navegador"
+                      : tieneRegistro
+                        ? guardado
+                          ? "Del cierre guardado"
+                          : "Del Excel de contabilidad"
+                        : "El Excel del mes · o arrástralo a la página"
+                }
+                accion={archivo ? "Ver o cambiar" : tieneRegistro ? "Cargar para recalcular" : "Subir informe"}
+                abierto={abierto === "informe"}
+                onToggle={() => toggleDato("informe")}
+              />
+            </div>
+
+            {abierto && (
+              <div
+                id="dato-editor"
+                className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-sm font-semibold">{EDITOR_TITULO[abierto](mes)}</h3>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="-mr-2 -mt-1.5 size-8"
+                    aria-label="Cerrar"
+                    onClick={() => abrir(null)}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+
+                {abierto === "comisiones" && (
+                  <>
+                    <AyudaDato
+                      que={
+                        <>
+                          Lo que se causó en comisiones en {mes}, por concepto. No va todo al gasto
+                          de una vez: es la <Termino t="cohorte">cohorte</Termino> del mes y se reparte
+                          a medida que se reconoce el ingreso de sus facturas.
+                        </>
+                      }
+                      donde={
+                        <>
+                          Del soporte de comisiones causadas del mes. Cada concepto necesita su
+                          cuenta de gasto. Si casi no cambió, copia el mes anterior y ajusta.
+                        </>
+                      }
+                    />
+                    <fieldset disabled={soloLectura} className="contents">
+                      <ConceptosPanel
+                        periodo={periodo}
+                        conceptos={conceptos}
+                        valores={valoresPeriodo}
+                        valoresAnterior={valoresAnterior}
+                        pool={pool}
+                        onValor={(id, v) => void onValor(id, v)}
+                        onCrear={onCrear}
+                        onRenombrar={(id, nombre) => void patchConcepto(id, { nombre })}
+                        onCuenta={(id, cuenta) => void patchConcepto(id, { cuenta: cuenta.trim() || null })}
+                        onActivo={(id, activo) => void patchConcepto(id, { activo })}
+                        onCopiarAnterior={() => void onCopiarAnterior()}
+                      />
+                    </fieldset>
+                  </>
+                )}
+
+                {abierto === "facturacion" && (
+                  <>
+                    <AyudaDato
+                      que={
+                        <>
+                          Todo lo facturado en {mes} con prefijo F93 y F94, menos sus notas crédito. Con
+                          este <Termino t="neto">neto</Termino> se calcula qué parte de las comisiones del
+                          mes va al gasto cada mes.
+                        </>
+                      }
+                      donde={<>En NetSuite: las facturas y notas crédito F93 y F94 emitidas en el mes.</>}
+                    />
+                    <fieldset disabled={soloLectura} className="contents">
+                      <BasePanel base={baseMes} onChange={(p, c, v) => void onBase(p, c, v)} />
+                    </fieldset>
+                  </>
+                )}
+
+                {abierto === "informe" && (
+                  <>
+                    <AyudaDato
+                      que={
+                        <>
+                          El Excel mensual con el ingreso reconocido de cada factura. Dice cuánto
+                          ingreso de cada mes de facturas se reconoció en {mes}.
+                        </>
+                      }
+                      donde={
+                        <>
+                          Llega a inicios del mes siguiente. Pesa mucho: se lee en tu navegador y no
+                          se sube a ningún servidor.
+                        </>
+                      }
+                    />
+                    <InformePanel lectura={lectura} guardado={guardado} onArchivo={cargar} onQuitar={limpiar} />
+                  </>
+                )}
+
+                {faltante && faltante !== abierto && listo[abierto] && (
+                  <div className="flex justify-end border-t border-border pt-3">
+                    <Button size="sm" onClick={() => abrir(faltante)}>
+                      Siguiente: {DATO_CORTO[faltante]}
+                      <ArrowRight className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
-          </Paso>
+          </section>
+
+          <section aria-labelledby="resultado-seccion" className="flex flex-col gap-3">
+            <h2 id="resultado-seccion" className="text-sm font-semibold">
+              Resultado de {mes}
+            </h2>
+
+            {cierre ? (
+              <>
+                <ResultadoCard
+                  cierre={cierre}
+                  controles={controles}
+                  tareas={tareas}
+                  fuente={archivo ? "informe" : "registrado"}
+                  guardadoEn={guardado?.createdAt ?? null}
+                  sinGuardar={sinGuardar}
+                  puedeGuardar={!soloLectura && !!archivo}
+                  guardando={guardando}
+                  exportando={exportando}
+                  onGuardar={() => void onGuardar()}
+                  onExportar={() => void onExportar()}
+                  onTarea={onTarea}
+                />
+
+                <div id="detalle-mes" data-tour="detalle" className="scroll-mt-20 rounded-lg border border-border bg-card shadow-sm">
+                  <button
+                    type="button"
+                    aria-expanded={detalleAbierto}
+                    aria-controls="detalle-cuerpo"
+                    onClick={() => setDetalleAbierto((v) => !v)}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg px-5 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="flex flex-col">
+                      <span className="text-sm font-semibold">Ver detalle</span>
+                      <span className="text-xs text-muted-foreground">
+                        Cálculo por cohorte, {cierre.asientos.length} asientos para NetSuite, controles
+                        {archivo ? " y comprobantes" : ""}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      aria-hidden
+                      className={cn("size-4 shrink-0 text-muted-foreground transition-transform", detalleAbierto && "rotate-180")}
+                    />
+                  </button>
+                  {detalleAbierto && (
+                    <div id="detalle-cuerpo" className="border-t border-border px-5 pb-5 pt-4">
+                      <RevisionPanel
+                        cierre={cierre}
+                        controles={controles}
+                        vista={vista}
+                        onVista={setVista}
+                        comprobantes={
+                          archivo ? <DocumentosTable documentos={archivo.documentos} periodo={periodo} /> : undefined
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border px-5 py-6">
+                <p className="text-sm">
+                  El gasto del mes aparece cuando cargues el informe diferido de {mes}.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {faltante
+                    ? `Falta: ${DATOS.filter((d) => !listo[d]).map((d) => DATO_CORTO[d]).join(", ")}.`
+                    : "Ya están los datos del mes."}
+                </p>
+                {faltante && (
+                  <Button size="sm" variant="outline" onClick={() => { abrir(faltante); irA("datos-mes"); }}>
+                    Completar {DATO_CORTO[faltante]}
+                  </Button>
+                )}
+              </div>
+            )}
+          </section>
         </TabsContent>
 
         <TabsContent value="seguimiento" className="pt-4">
@@ -703,3 +791,17 @@ export function CalculoComisionesPageClient({
     </div>
   );
 }
+
+const DATOS: DatoMes[] = ["comisiones", "facturacion", "informe"];
+
+const DATO_CORTO: Record<DatoMes, string> = {
+  comisiones: "comisiones del mes",
+  facturacion: "facturación F93/F94",
+  informe: "informe diferido",
+};
+
+const EDITOR_TITULO: Record<DatoMes, (mes: string) => string> = {
+  comisiones: (mes) => `Comisiones causadas en ${mes}`,
+  facturacion: (mes) => `Facturación F93/F94 de ${mes}`,
+  informe: (mes) => `Informe diferido de ${mes}`,
+};

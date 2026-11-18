@@ -241,7 +241,11 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
                       <SelectValue placeholder="Selecciona una falta" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ANTICIPOS_FALTA_OPTIONS.map((opt) => (
+                      {/* "Legalizado" solo lo pone el botón Legalizar; aquí aparece únicamente si el
+                          registro ya lo está, para poder conservarlo al editar. */}
+                      {ANTICIPOS_FALTA_OPTIONS.filter(
+                        (opt) => opt.value !== "legalizado" || field.value === "legalizado",
+                      ).map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
                         </SelectItem>
@@ -359,7 +363,7 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
                 ) : null}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="anticipo-fecha-max">Fecha máxima de legalización</Label>
+                <Label htmlFor="anticipo-fecha-max">Fecha máxima</Label>
                 <Input
                   id="anticipo-fecha-max"
                   readOnly
@@ -371,7 +375,7 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
                 />
                 <span id="anticipo-fecha-max-hint">
                   <FieldHint>
-                    {DIAS_LEGALIZACION} días corridos desde el día siguiente a la fecha final.
+                    Para legalizar: {DIAS_LEGALIZACION} días corridos desde el día siguiente a la fecha final.
                   </FieldHint>
                 </span>
               </div>

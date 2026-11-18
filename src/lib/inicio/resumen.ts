@@ -65,7 +65,7 @@ async function resumenAnticipos(ahora: Date): Promise<ResumenAnticipos> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .schema("anticipos").from("registros")
-    .select("falta, observacion_1, fecha_rq, fecha_gestion");
+    .select("falta, fecha_rq");
   if (error) throw new Error(error.message);
   const filas = data ?? [];
   const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, "0")}-${String(ahora.getDate()).padStart(2, "0")}`;

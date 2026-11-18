@@ -101,6 +101,13 @@ export async function createAnticipo(
 
   const payload: AnticipoCreateInput = parsed.data;
 
+  if (payload.falta === "legalizado") {
+    return {
+      error: "Un anticipo nuevo no puede quedar legalizado. Guárdalo y usa «Legalizar».",
+      fieldErrors: { falta: "Se legaliza solo con el botón «Legalizar»." },
+    };
+  }
+
   const { error } = await supabase.schema("anticipos").from("registros").insert({
     nombre: payload.nombre,
     requerimiento: payload.requerimiento,
@@ -173,6 +180,23 @@ export async function updateAnticipo(
   const { supabase, userId } = acceso;
 
   const payload: AnticipoUpdateInput = parsed.data;
+
+  // "Legalizado" solo lo pone `legalizeAnticipo` (botón Legalizar). Editar puede conservarlo
+  // si el registro ya lo estaba, pero no llegar a él.
+  if (payload.falta === "legalizado") {
+    const { data: actual, error: errActual } = await supabase
+      .schema("anticipos").from("registros")
+      .select("falta")
+      .eq("id", payload.id)
+      .maybeSingle();
+    if (errActual) return { error: `No se pudo leer el registro: ${errActual.message}` };
+    if (actual?.falta !== "legalizado") {
+      return {
+        error: "Para legalizar usa el botón «Legalizar».",
+        fieldErrors: { falta: "Se legaliza solo con el botón «Legalizar»." },
+      };
+    }
+  }
 
   const { error } = await supabase
     .schema("anticipos").from("registros")

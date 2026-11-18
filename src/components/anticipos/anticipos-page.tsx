@@ -69,11 +69,11 @@ const FILTROS_INICIALES: Filtros = {
   q: "",
 };
 
-/** `pendiente` agrupa vencidos y en plazo: todo lo que aún no se ha resuelto. */
+/** `pendiente` agrupa vencidos y en plazo: todo lo que aún no se ha legalizado. */
 const PENDIENTE = "pendiente";
 
 const SEGUIMIENTO_OPCIONES = [
-  { value: PENDIENTE, label: "Sin resolver" },
+  { value: PENDIENTE, label: "Sin legalizar" },
   ...(["revisar", "atencion", "ok"] as NivelAlerta[]).map((n) => ({
     value: n,
     label: NIVEL_SEGUIMIENTO_LABEL[n],
@@ -177,7 +177,7 @@ export function AnticiposPageClient({
         const sb = seguimientos.get(b.id)!;
         const peso = PESO_SEGUIMIENTO[sa.nivel] - PESO_SEGUIMIENTO[sb.nivel];
         if (peso !== 0) return peso;
-        // Pendientes: el más antiguo primero. Resueltos: el más reciente primero.
+        // Pendientes: el más antiguo primero. Legalizados: el más reciente primero.
         return sa.nivel === "ok" ? b.fecha_rq.localeCompare(a.fecha_rq) : a.fecha_rq.localeCompare(b.fecha_rq);
       });
   }, [rows, filtros.falta, filtros.observacion, filtros.seguimiento, filtros.colaborador, qDiferida, seguimientos]);
@@ -249,10 +249,10 @@ export function AnticiposPageClient({
         />
         <Indicador
           icon={<Wallet className="size-4" />}
-          label="Sin resolver"
+          label="Sin legalizar"
           value={indicadores.pendientes}
           tone="warning"
-          detalle={indicadores.valorPendiente > 0 ? formatAnticipoCurrency(indicadores.valorPendiente)! : "Sin fecha de gestión"}
+          detalle={indicadores.valorPendiente > 0 ? formatAnticipoCurrency(indicadores.valorPendiente)! : "Todo legalizado"}
           activo={filtros.seguimiento === PENDIENTE}
           onClick={() => aplicar({ seguimiento: PENDIENTE })}
         />

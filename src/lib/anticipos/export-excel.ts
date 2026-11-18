@@ -81,17 +81,17 @@ function tonoObservacion(value: AnticipoObservacion1): Tono {
   return TONOS.neutro;
 }
 
-type Seguimiento = "Resuelto" | "Vencido" | "En plazo";
+type Seguimiento = "Legalizado" | "Vencido" | "En plazo";
 
 const TONO_SEGUIMIENTO: Record<Seguimiento, Tono> = {
-  Resuelto: TONOS.exito,
+  Legalizado: TONOS.exito,
   Vencido: TONOS.peligro,
   "En plazo": TONOS.neutro,
 };
 
 function seguimientoDe(r: AnticipoRow, hoy: string): { estado: Seguimiento; dias: number | null } {
   const s = seguimientoBase(r, hoy);
-  // Solo se reportan días vencidos; en plazo o resuelto queda vacío.
+  // Solo se reportan días vencidos; en plazo o legalizado queda vacío.
   return { estado: NIVEL_SEGUIMIENTO_LABEL[s.nivel] as Seguimiento, dias: s.dias !== null && s.dias > 0 ? s.dias : null };
 }
 
@@ -130,7 +130,7 @@ function describirFiltros(f: AnticiposExportFiltros): string {
   }
   if (f.seguimiento) {
     const nivel = f.seguimiento as keyof typeof NIVEL_SEGUIMIENTO_LABEL;
-    partes.push(`Seguimiento: ${f.seguimiento === "pendiente" ? "Sin resolver" : (NIVEL_SEGUIMIENTO_LABEL[nivel] ?? f.seguimiento)}`);
+    partes.push(`Seguimiento: ${f.seguimiento === "pendiente" ? "Sin legalizar" : (NIVEL_SEGUIMIENTO_LABEL[nivel] ?? f.seguimiento)}`);
   }
   if (f.colaborador === "excolaboradores") partes.push("Solo excolaboradores");
   if (f.colaborador === "activos") partes.push("Solo colaboradores activos");

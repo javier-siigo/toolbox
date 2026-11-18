@@ -6,9 +6,12 @@ import type { AnticipoRow } from "./schema";
  * Semáforo de anticipos. ÚNICA fuente de la regla de vencimiento: la tabla, los indicadores,
  * el detalle, el Excel y el Inicio llaman a `seguimientoDe` y nunca deciden por su cuenta.
  *
- *   ok        verde     legalizado o con fecha de gestión
- *   atencion  amarillo  pendiente, hoy ≤ fecha máxima de legalización
- *   revisar   rojo      pendiente y ya pasó la fecha máxima de legalización (vencido)
+ *   ok        verde     legalizado (falta = legalizado; solo lo pone el botón Legalizar)
+ *   atencion  amarillo  sin legalizar, hoy ≤ fecha máxima de legalización
+ *   revisar   rojo      sin legalizar y ya pasó la fecha máxima de legalización (vencido)
+ *
+ * La fecha de gestión y la observación son solo seguimiento: no detienen el conteo ni
+ * cierran el anticipo. Mientras no esté legalizado, el reloj sigue corriendo.
  *
  * Fecha máxima de legalización = fecha final + DIAS_LEGALIZACION días corridos
  * (se cuentan desde el día siguiente a la fecha final). Ej.: final 1 nov → máxima 9 nov;
@@ -19,12 +22,12 @@ import type { AnticipoRow } from "./schema";
 export const DIAS_LEGALIZACION = 8;
 
 export interface Seguimiento extends Alerta {
-  /** Días de vencimiento (negativo = días que faltan para vencer); null si ya está resuelto. */
+  /** Días de vencimiento (negativo = días que faltan para vencer); null si ya está legalizado. */
   dias: number | null;
 }
 
 export const NIVEL_SEGUIMIENTO_LABEL: Record<NivelAlerta, string> = {
-  ok: "Resuelto",
+  ok: "Legalizado",
   atencion: "En plazo",
   revisar: "Vencido",
 };
@@ -50,24 +53,17 @@ export function fechaMaximaLegalizacion(fechaFinal: string | null | undefined): 
   return new Date(Date.UTC(y, m - 1, d + DIAS_LEGALIZACION)).toISOString().slice(0, 10);
 }
 
-export function esResuelto(r: Pick<AnticipoRow, "falta" | "observacion_1" | "fecha_gestion">): boolean {
-  return r.falta === "legalizado" || r.fecha_gestion !== null;
-}
-
 function plural(n: number): string {
   return `${n} ${n === 1 ? "día" : "días"}`;
 }
 
 /** `hoy` en `YYYY-MM-DD` (hora de Colombia; la calcula el servidor). */
 export function seguimientoDe(
-  r: Pick<AnticipoRow, "falta" | "observacion_1" | "fecha_gestion" | "fecha_rq">,
+  r: Pick<AnticipoRow, "falta" | "fecha_rq">,
   hoy: string,
 ): Seguimiento {
   if (r.falta === "legalizado") {
-    return { nivel: "ok", motivo: "Legalizado", dias: null };
-  }
-  if (r.fecha_gestion !== null) {
-    return { nivel: "ok", motivo: "Gestionado", dias: null };
+    return { nivel: "ok", motivo: "Sin pendientes", dias: null };
   }
   const maxima = fechaMaximaLegalizacion(r.fecha_rq);
   if (!maxima) return { nivel: "atencion", motivo: "Sin fecha final", dias: null };
