@@ -3,16 +3,15 @@ import { z } from "zod";
 import type { Database } from "@/types/supabase";
 
 export const ANTICIPOS_FALTA_LABELS = {
-  permisos_de_soportes: "Permisos de soportes",
-  revisar_descuento_nomina: "Revisar descuento de nómina",
-  autorizacion_descuento_nomina: "Autorización descuento de nómina",
-  legalizado: "Legalizado",
-  revisar_soportes: "Revisar soportes",
-  devolucion: "Devolución",
-  autorizacion_soportes: "Autorización soportes",
-  revisar_con_harold: "Revisar con Harold",
+  no_ha_viajado: "No ha viajado",
   soportes: "Soportes",
+  revisar_soportes: "Revisar soportes",
+  autorizacion_descuento_nomina: "Autorización descuento de nómina",
+  revisar_con_harold: "Revisar con Harold",
   registrar: "Registrar",
+  revisar_descuento_nomina: "Revisar descuento de nómina",
+  devolucion: "Devolución",
+  legalizado: "Legalizado",
 } as const satisfies Record<
   Database["anticipos"]["Enums"]["falta"],
   string
@@ -22,8 +21,7 @@ export const ANTICIPOS_OBSERVACION_1_LABELS = {
   no_se_ha_contactado: "No se ha contactado",
   escrito_1_vez: "Escrito 1 vez",
   escrito_2_veces: "Escrito 2 veces",
-  escrito_3_veces: "Escrito 3 veces",
-  legalizado: "Legalizado",
+  correo_al_colaborador: "Correo al colaborador",
   correo_al_lider: "Correo al líder",
 } as const satisfies Record<
   Database["anticipos"]["Enums"]["observacion_1"],

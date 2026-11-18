@@ -77,9 +77,7 @@ function tonoFalta(value: AnticipoFalta): Tono {
 }
 
 function tonoObservacion(value: AnticipoObservacion1): Tono {
-  if (value === "legalizado") return TONOS.exito;
-  if (value === "correo_al_lider") return TONOS.info;
-  if (value === "escrito_3_veces") return TONOS.alerta;
+  if (value === "correo_al_lider" || value === "correo_al_colaborador") return TONOS.info;
   return TONOS.neutro;
 }
 

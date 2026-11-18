@@ -181,22 +181,20 @@ export type Database = {
     }
     Enums: {
       falta:
-        | "permisos_de_soportes"
-        | "revisar_descuento_nomina"
-        | "autorizacion_descuento_nomina"
-        | "legalizado"
-        | "revisar_soportes"
-        | "devolucion"
-        | "autorizacion_soportes"
-        | "revisar_con_harold"
+        | "no_ha_viajado"
         | "soportes"
+        | "revisar_soportes"
+        | "autorizacion_descuento_nomina"
+        | "revisar_con_harold"
         | "registrar"
+        | "revisar_descuento_nomina"
+        | "devolucion"
+        | "legalizado"
       observacion_1:
         | "no_se_ha_contactado"
         | "escrito_1_vez"
         | "escrito_2_veces"
-        | "escrito_3_veces"
-        | "legalizado"
+        | "correo_al_colaborador"
         | "correo_al_lider"
     }
     CompositeTypes: {
@@ -1068,23 +1066,21 @@ export const Constants = {
   anticipos: {
     Enums: {
       falta: [
-        "permisos_de_soportes",
-        "revisar_descuento_nomina",
-        "autorizacion_descuento_nomina",
-        "legalizado",
-        "revisar_soportes",
-        "devolucion",
-        "autorizacion_soportes",
-        "revisar_con_harold",
+        "no_ha_viajado",
         "soportes",
+        "revisar_soportes",
+        "autorizacion_descuento_nomina",
+        "revisar_con_harold",
         "registrar",
+        "revisar_descuento_nomina",
+        "devolucion",
+        "legalizado",
       ],
       observacion_1: [
         "no_se_ha_contactado",
         "escrito_1_vez",
         "escrito_2_veces",
-        "escrito_3_veces",
-        "legalizado",
+        "correo_al_colaborador",
         "correo_al_lider",
       ],
     },

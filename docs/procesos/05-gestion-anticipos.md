@@ -40,19 +40,19 @@ Existe una restricción de **unicidad** por colaborador + requerimiento (el cód
 
 | Valor | Etiqueta |
 |---|---|
-| `permisos_de_soportes` | Permisos de soportes |
-| `revisar_descuento_nomina` | Revisar descuento de nómina |
-| `autorizacion_descuento_nomina` | Autorización descuento de nómina |
-| `legalizado` | Legalizado |
-| `revisar_soportes` | Revisar soportes |
-| `devolucion` | Devolución |
-| `autorizacion_soportes` | Autorización soportes |
-| `revisar_con_harold` | Revisar con Harold |
+| `no_ha_viajado` | No ha viajado |
 | `soportes` | Soportes |
+| `revisar_soportes` | Revisar soportes |
+| `autorizacion_descuento_nomina` | Autorización descuento de nómina |
+| `revisar_con_harold` | Revisar con Harold |
+| `registrar` | Registrar |
+| `revisar_descuento_nomina` | Revisar descuento de nómina |
+| `devolucion` | Devolución |
+| `legalizado` | Legalizado |
 
 ### Valores de `observacion_1`
 
-`no_se_ha_contactado` (No se ha contactado) · `escrito_1_vez` · `escrito_2_veces` · `escrito_3_veces` · `correo_al_lider` (Correo al líder) · `legalizado`.
+`no_se_ha_contactado` (No se ha contactado) · `escrito_1_vez` · `escrito_2_veces` · `correo_al_colaborador` (Correo al colaborador) · `correo_al_lider` (Correo al líder).
 
 ## Operaciones (Server Actions, `src/lib/anticipos/actions.ts`)
 
@@ -64,7 +64,7 @@ Todas exigen sesión (`auth.getUser`) y validan con zod (`schema.ts`). Tras escr
 | `createAnticipo` | Valida formulario, inserta con `created_by/updated_by` = usuario. Duplicado → error de campo |
 | `updateAnticipo` | Actualiza todos los campos editables; fija `updated_by` |
 | `deleteAnticipo(id)` | Elimina por UUID |
-| `legalizeAnticipo(id)` | Atajo: pone `falta = legalizado` y `observacion_1 = legalizado` |
+| `legalizeAnticipo(id)` | Atajo: pone `falta = legalizado` |
 
 Validaciones: `fecha_rq` debe ser una fecha válida; `fecha_gestion` puede ir vacía (se guarda `null`).
 

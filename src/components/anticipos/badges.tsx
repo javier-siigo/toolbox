@@ -22,9 +22,7 @@ function dotFalta(value: AnticipoFalta): string {
 }
 
 function dotObservacion(value: AnticipoObservacion1): string {
-  if (value === "legalizado") return "bg-emerald-500";
-  if (value === "correo_al_lider") return "bg-sky-500";
-  if (value === "escrito_3_veces") return "bg-amber-500";
+  if (value === "correo_al_lider" || value === "correo_al_colaborador") return "bg-sky-500";
   return "bg-muted-foreground";
 }
 

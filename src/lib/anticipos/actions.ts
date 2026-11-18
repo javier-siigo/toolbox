@@ -260,7 +260,6 @@ export async function legalizeAnticipo(
     .schema("anticipos").from("registros")
     .update({
       falta: "legalizado",
-      observacion_1: "legalizado",
       updated_by: userId,
     })
     .eq("id", parsed.data.id);

@@ -438,7 +438,7 @@ function AnticiposFormFields<T extends AnticipoCreateInput & FieldValues>({
 const DEFAULT_VALUES: AnticipoCreateInput = {
   nombre: "",
   requerimiento: "",
-  falta: "permisos_de_soportes",
+  falta: "soportes",
   observacion_1: "no_se_ha_contactado",
   observacion_2: "",
   valor: "",

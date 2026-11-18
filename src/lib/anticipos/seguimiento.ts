@@ -51,7 +51,7 @@ export function fechaMaximaLegalizacion(fechaFinal: string | null | undefined): 
 }
 
 export function esResuelto(r: Pick<AnticipoRow, "falta" | "observacion_1" | "fecha_gestion">): boolean {
-  return r.falta === "legalizado" || r.observacion_1 === "legalizado" || r.fecha_gestion !== null;
+  return r.falta === "legalizado" || r.fecha_gestion !== null;
 }
 
 function plural(n: number): string {
@@ -63,7 +63,7 @@ export function seguimientoDe(
   r: Pick<AnticipoRow, "falta" | "observacion_1" | "fecha_gestion" | "fecha_rq">,
   hoy: string,
 ): Seguimiento {
-  if (r.falta === "legalizado" || r.observacion_1 === "legalizado") {
+  if (r.falta === "legalizado") {
     return { nivel: "ok", motivo: "Legalizado", dias: null };
   }
   if (r.fecha_gestion !== null) {

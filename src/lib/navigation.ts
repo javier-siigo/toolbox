@@ -7,11 +7,13 @@ import {
   DatabaseZap,
   FileChartColumn,
   FileText,
+  Globe2,
   HandCoins,
   Landmark,
   Receipt,
   Scale,
   Settings,
+  Workflow,
   Zap,
 } from "lucide-react";
 
@@ -30,6 +32,15 @@ export type Proceso = {
   requiere?: readonly ProcesoId[];
   /** Solo visible para administradores. */
   soloAdmin?: boolean;
+  /** Slug de una rama de `Area.grupos`. Sin grupo, el proceso cuelga directo del área. */
+  grupo?: string;
+};
+
+/** Rama intermedia de la barra lateral dentro de un área (ej. Países, Procesos). */
+export type Grupo = {
+  slug: string;
+  label: string;
+  icon: LucideIcon;
 };
 
 export type Area = {
@@ -38,6 +49,8 @@ export type Area = {
   description: string;
   icon: LucideIcon;
   procesos: Proceso[];
+  /** Ramas opcionales; el orden aquí es el orden en la barra lateral. */
+  grupos?: Grupo[];
   /** Se abre desde el menú de usuario, no desde la barra lateral. */
   enMenuUsuario?: boolean;
 };
@@ -48,9 +61,14 @@ export const AREAS: Area[] = [
     label: "Conciliaciones",
     description: "Comparación y cierre contable por país.",
     icon: Scale,
+    grupos: [
+      { slug: "paises", label: "Países", icon: Globe2 },
+      { slug: "procesos", label: "Procesos", icon: Workflow },
+    ],
     procesos: [
       {
         id: PROCESOS.CONCILIACION_CHILE,
+        grupo: "paises",
         slug: "chile",
         label: "Chile",
         description: "Conciliación contable para operaciones en Chile.",
@@ -59,6 +77,7 @@ export const AREAS: Area[] = [
       },
       {
         id: PROCESOS.CONCILIACION_COLOMBIA,
+        grupo: "paises",
         slug: "colombia",
         label: "Colombia",
         description: "Conciliación contable para operaciones en Colombia.",
@@ -67,6 +86,7 @@ export const AREAS: Area[] = [
       },
       {
         id: PROCESOS.CONCILIACION_ECUADOR,
+        grupo: "paises",
         slug: "ecuador",
         label: "Ecuador",
         description: "Conciliación contable para operaciones en Ecuador.",
@@ -75,6 +95,7 @@ export const AREAS: Area[] = [
       },
       {
         id: PROCESOS.CONCILIACION_MEXICO,
+        grupo: "paises",
         slug: "mexico",
         label: "México",
         description: "Conciliación contable para operaciones en México.",
@@ -83,6 +104,7 @@ export const AREAS: Area[] = [
       },
       {
         id: PROCESOS.CONCILIACION_URUGUAY,
+        grupo: "paises",
         slug: "uruguay",
         label: "Uruguay",
         description: "Conciliación contable para operaciones en Uruguay.",
@@ -91,6 +113,7 @@ export const AREAS: Area[] = [
       },
       {
         id: PROCESOS.CONCILIACION_ASIENTOS,
+        grupo: "procesos",
         slug: "asientos-diario",
         label: "Asientos de diario",
         description:
@@ -198,6 +221,11 @@ export function findArea(areaSlug: string): Area | undefined {
 
 export function findProceso(areaSlug: string, procesoSlug: string): Proceso | undefined {
   return findArea(areaSlug)?.procesos.find((p) => p.slug === procesoSlug);
+}
+
+export function procesosSinGrupo(area: Area): Proceso[] {
+  const slugs = new Set((area.grupos ?? []).map((g) => g.slug));
+  return area.procesos.filter((p) => !p.grupo || !slugs.has(p.grupo));
 }
 
 export function procesoHref(areaSlug: string, procesoSlug: string): string {

@@ -29,7 +29,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Permisos } from "@/lib/auth/permisos-shared";
 import { filterAreas } from "@/lib/auth/permisos-shared";
 import { FlagIcon } from "@/lib/flags";
-import { AREAS, procesoHref } from "@/lib/navigation";
+import { AREAS, procesoHref, procesosSinGrupo, type Proceso } from "@/lib/navigation";
 
 const OPEN_AREAS_KEY = "toolbox:sidebar-areas-open";
 
@@ -85,12 +85,39 @@ export function AppSidebar({ user, permisos }: AppSidebarProps) {
     if (!pathname) return;
     const seg = pathname.split("/").filter(Boolean);
     const currentArea = seg[0];
-    if (currentArea && AREAS.some((a) => a.slug === currentArea)) {
-      setOpenAreas((prev) =>
-        prev[currentArea] ? prev : { ...prev, [currentArea]: true },
-      );
+    const area = AREAS.find((a) => a.slug === currentArea);
+    if (area) {
+      const grupo = area.procesos.find((p) => p.slug === seg[1])?.grupo;
+      setOpenAreas((prev) => {
+        const next = { ...prev };
+        next[area.slug] = true;
+        if (grupo) next[`${area.slug}/${grupo}`] = true;
+        return next;
+      });
     }
   }, [pathname]);
+
+  function renderProceso(areaSlug: string, proceso: Proceso) {
+    const href = procesoHref(areaSlug, proceso.slug);
+    return (
+      <SidebarMenuSubItem key={proceso.slug}>
+        <SidebarMenuSubButton asChild isActive={pathname === href} size="sm">
+          <Link href={href} transitionTypes={["nav-forward"]}>
+            {proceso.flagCode ? (
+              <FlagIcon
+                code={proceso.flagCode}
+                title={proceso.label}
+                className="size-4 shrink-0 rounded-[2px]"
+              />
+            ) : (
+              <proceso.icon />
+            )}
+            <span>{proceso.label}</span>
+          </Link>
+        </SidebarMenuSubButton>
+      </SidebarMenuSubItem>
+    );
+  }
 
   function toggleArea(slug: string) {
     setOpenAreas((prev) => ({ ...prev, [slug]: !prev[slug] }));
@@ -174,32 +201,40 @@ export function AppSidebar({ user, permisos }: AppSidebarProps) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          {area.procesos.map((proceso) => {
-                            const href = procesoHref(area.slug, proceso.slug);
-                            const active = pathname === href;
+                          {(area.grupos ?? []).map((grupo) => {
+                            const items = area.procesos.filter(
+                              (p) => p.grupo === grupo.slug,
+                            );
+                            if (items.length === 0) return null;
+                            const key = `${area.slug}/${grupo.slug}`;
+                            const open = hydrated ? openAreas[key] ?? false : false;
                             return (
-                              <SidebarMenuSubItem key={proceso.slug}>
-                                <SidebarMenuSubButton
-                                  asChild
-                                  isActive={active}
-                                  size="sm"
-                                >
-                                  <Link href={href} transitionTypes={["nav-forward"]}>
-                                    {proceso.flagCode ? (
-                                      <FlagIcon
-                                        code={proceso.flagCode}
-                                        title={proceso.label}
-                                        className="size-4 shrink-0 rounded-[2px]"
-                                      />
-                                    ) : (
-                                      <proceso.icon />
-                                    )}
-                                    <span>{proceso.label}</span>
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
+                              <Collapsible
+                                key={grupo.slug}
+                                asChild
+                                open={open}
+                                onOpenChange={() => toggleArea(key)}
+                              >
+                                <SidebarMenuSubItem>
+                                  <CollapsibleTrigger asChild>
+                                    <SidebarMenuSubButton asChild size="sm">
+                                      <button type="button" className="w-full">
+                                        <grupo.icon />
+                                        <span>{grupo.label}</span>
+                                        <ChevronRight className="ml-auto size-3.5 shrink-0 transition-transform duration-200 [button[data-state=open]_&]:rotate-90" />
+                                      </button>
+                                    </SidebarMenuSubButton>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <SidebarMenuSub className="mx-2 mr-0">
+                                      {items.map((p) => renderProceso(area.slug, p))}
+                                    </SidebarMenuSub>
+                                  </CollapsibleContent>
+                                </SidebarMenuSubItem>
+                              </Collapsible>
                             );
                           })}
+                          {procesosSinGrupo(area).map((p) => renderProceso(area.slug, p))}
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     </SidebarMenuItem>
