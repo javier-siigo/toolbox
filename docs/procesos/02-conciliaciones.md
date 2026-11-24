@@ -14,7 +14,7 @@ Permite al equipo contable **conciliar el extracto bancario de un período** (y 
 
 Las páginas implementadas usan el mismo componente `ConciliacionesPageClient`. Algunos bancos tienen **particularidades** que agregan pasos a la UI (ver más abajo).
 
-Fuera de los países está la **conciliación de asientos de diario vs balance** (`/conciliaciones/asientos-diario`), con su propio flujo: ver [Asientos de diario](#asientos-de-diario).
+Fuera de los países está la **conciliación de asientos de diario vs balance** (`/conciliaciones/asientos-diario`), con su propio flujo: ver [Asientos de diario](#asientos-de-diario). También la **Conciliación 1305** (`/conciliaciones/cartera-1305`): terceros con saldo negativo en la cartera a una fecha de corte, ver [Conciliación 1305](#conciliación-1305).
 
 ## Acceso
 
@@ -344,6 +344,44 @@ Hojas: **Resumen** (parámetros, avisos, conteos, totales y casos), **Conciliaci
 
 **Con NetSuite como fuente**: de 464 cuentas, 336 cruzan (3 por redondeo), 80 sin movimiento y 48 no cruzan, todas con su causa (ver la tabla de arriba). **Con el Excel de Auditoría** (el mismo mes) no queda ninguna diferencia, lo que confirma que el faltante es de la consulta SuiteQL y no de la contabilidad. Las diferencias grandes son de bancos (Davivienda, Bancolombia, Bogotá, fondo de inversión): **SuiteQL no devuelve ninguna transacción tipo `Transfer`** en el periodo, así que el rol de la integración de NetSuite probablemente no tiene permiso para *Transferir fondos*. Las retenciones (2365xx/2367xx/2368xx) aparecen en los asientos con débito = crédito y en el balance solo con el crédito.
 
+## Conciliación 1305
+
+Reemplaza el proceso manual de *Antigüedad de AR → Detalle* + tabla dinámica + BUSCARV: lista los **terceros cuyo saldo en las cuentas 1305 es negativo a una fecha de corte**, con los documentos que lo explican. Proceso de permisos: `conciliaciones.cartera-1305` (migración `20261124120000_conciliacion_cartera_1305.sql`); basta el nivel `ver` porque solo lee NetSuite. No usa Storage ni n8n.
+
+### Flujo del usuario
+
+1. Elige el **mes de corte** (último día del mes; solo meses cerrados) y la **subsidiaria** (por defecto SIIGO S.A.S).
+2. **Generar reporte**: el navegador lanza las consultas a NetSuite por tramos (3 a la vez, con reintento) y muestra el avance por tramo. Octubre 2026 tarda ~3 min.
+3. Resultado: indicadores (terceros negativos, saldo negativo, documentos a revisar, cartera total al corte), tabla de terceros con búsqueda y detalle desplegable, y **Descargar Excel**.
+
+### Lógica
+
+Lo mismo que el Excel manual, calculado desde NetSuite:
+
+1. **Partidas abiertas hoy** en las cuentas de movimiento `1305%` de tipo *AcctRec* (13050501 a 13050505), libro principal, subsidiaria de la línea: `transactionaccountingline.amountunpaid` (débitos) o `paymentamountunused` (créditos) distinto de 0, con fecha ≤ corte. El tercero es `transactionline.entity` (los diarios lo llevan por línea) o `transaction.entity`.
+2. **Antigüedad "a fecha de"**: a cada partida se le devuelve lo aplicado **después del corte**, según `previoustransactionlinelink` (`linktype = 'Payment'`). Una aplicación cuenta en la **fecha más tardía de sus dos documentos**: un pago del 30/10 aplicado a una factura del 1/11 seguía abierto el 31/10. Esto también trae partidas que hoy están cerradas.
+3. Saldo por tercero = suma de sus partidas al corte. Los terceros con saldo < 0 se listan con sus documentos **sin las facturas de venta** (la factura y el pago no se netean entre sí; las facturas suman al saldo del tercero y se informan aparte).
+
+### Flujo técnico
+
+- `POST /api/conciliaciones/cartera-1305` con `accion`:
+  - `abiertas` `{ subsidiariaId, corte, desde|null, hasta }` → `{ partidas }`. Tramos (`tramosPartidas`): un año por consulta desde 2020 (el primero sin límite inferior) y el año del corte en dos mitades. En NetSuite el costo depende del **rango de fechas** más que de las filas: un año viejo con 12 partidas tarda lo mismo (~90 s) que un mes reciente con 13.000.
+  - `aplicaciones` `{ subsidiariaId, corte, desde, hasta }` → `{ partidas }` con `devolver`. Tramos mensuales de corte+1 a hoy (`tramosAplicaciones`), para no pasar las 100.000 filas por consulta si el corte es antiguo. Dos consultas por tramo: la partida como documento aplicado y como documento que aplica.
+  - `terceros` `{ ids }` (máx. 900) → nombre (`BUILTIN.DF`) y `custentity_ks_documento`.
+- Las partidas viajan como tuplas (`PartidaTupla`): Vercel limita la respuesta a 4,5 MB.
+- Todas las consultas ordenan por `tal.transaction, tal.transactionline`: sin `ORDER BY` NetSuite perdió filas entre páginas en las pruebas.
+- Lógica: `src/lib/conciliaciones/cartera-1305.ts` (SQL, servidor), `cartera-1305-shared.ts` (tramos, unión y cálculo), `cartera-1305-excel.ts` (Excel en el navegador). UI: `src/components/conciliaciones/cartera-1305/cartera-1305-page.tsx`.
+
+### Excel
+
+- **Resumen**: parámetros, terceros negativos y su saldo, documentos listados, cartera total al corte y desglose por tipo de transacción.
+- **Terceros negativos**: un tercero por fila (cliente, KS Documento, saldo, documentos, facturas abiertas), con totales `SUBTOTAL` que respetan el filtro.
+- **Documentos**: el equivalente a la hoja *1305 Negative DOC* (cliente, KS Documento, tipo, fecha, número, vencimiento, días vencido, cuenta, saldo pendiente).
+
+### Validación con octubre 2026 (SIIGO S.A.S)
+
+Contra el Excel manual *Informe 1305 Negativa Octubre 2026*: **1.496 terceros y 1.530 documentos** en ambos; 1.516 documentos coinciden al peso. Cartera total 31.095,9 M vs 31.115,1 M del informe de NetSuite (0,06 %). Diferencias: dos documentos de terceros a los que después se les cambió el KS Documento (se agregó `001`), una nota crédito de −74.931 que se perdió por paginar sin orden (corregido) y un diario de −37. El 31/10 existe el asiento 2005417 por 527.983.175,45, el total del informe manual: la reclasificación hecha con este resultado.
+
 ## Errores
 
 | Código | HTTP | Mensaje al usuario |
@@ -367,6 +405,7 @@ Hojas: **Resumen** (parámetros, avisos, conteos, totales y casos), **Conciliaci
 - UI: `src/components/conciliaciones/` (`conciliaciones-page`, `bank-combobox`, `dual-upload-card`, `file-slot`, `txt-convert-row`, `types`)
 - API: `src/app/api/conciliaciones/{upload-url,conciliar,convertir-txt}/route.ts`
 - Lógica: `src/lib/conciliaciones/{conciliar,bancos,particularidades,convertir-txt}.ts`
+- Conciliación 1305: ver [su sección](#conciliación-1305)
 
 ## Hallazgos
 

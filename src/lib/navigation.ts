@@ -13,6 +13,7 @@ import {
   Receipt,
   Scale,
   Settings,
+  UserMinus,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -119,6 +120,15 @@ export const AREAS: Area[] = [
         description:
           "Cruza los asientos de diario del periodo contra el balance, cuenta por cuenta, y explica cada diferencia.",
         icon: BookCheck,
+      },
+      {
+        id: PROCESOS.CONCILIACION_1305,
+        grupo: "procesos",
+        slug: "cartera-1305",
+        label: "Conciliación 1305",
+        description:
+          "Terceros con saldo negativo en la cartera 1305 a una fecha de corte, con los documentos que lo explican.",
+        icon: UserMinus,
       },
     ],
   },

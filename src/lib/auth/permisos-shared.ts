@@ -15,6 +15,8 @@ export const PROCESOS = {
   CONCILIACION_URUGUAY: "conciliaciones.uruguay",
   /** Asientos de diario vs balance: no depende de un país. */
   CONCILIACION_ASIENTOS: "conciliaciones.asientos-diario",
+  /** Cartera 1305: terceros con saldo negativo a una fecha de corte. */
+  CONCILIACION_1305: "conciliaciones.cartera-1305",
   GESTION_ANTICIPOS: "ingresos.gestion-anticipos",
   NOTAS_CREDITO: "ingresos.notas-credito",
   CALCULO_COMISIONES: "ingresos.calculo-comisiones",
