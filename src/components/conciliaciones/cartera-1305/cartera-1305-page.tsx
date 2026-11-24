@@ -14,7 +14,6 @@ import {
   corteDeMes,
   deTupla,
   negativos as armarNegativos,
-  tipoLabel,
   tramosAplicaciones,
   tramosPartidas,
   unirPartidas,
@@ -568,7 +567,7 @@ function Resultados({ resultado }: { resultado: Resultado }) {
                               {t.facturas > 0 && (
                                 <tr className="border-t border-border/50 text-muted-foreground">
                                   <td className="py-1 pr-3" colSpan={6}>
-                                    {tipoLabel("CustInvc")}s abiertas ({t.facturas}), suman al saldo pero no se listan
+                                    {t.facturas === 1 ? "Factura de venta abierta" : `Facturas de venta abiertas (${t.facturas})`}: suma al saldo del tercero, no se lista
                                   </td>
                                   <td className="py-1 pr-2 text-right font-mono tabular-nums">{fmtPesos.format(t.facturasSaldo)}</td>
                                 </tr>

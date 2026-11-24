@@ -351,7 +351,7 @@ Reemplaza el proceso manual de *Antigüedad de AR → Detalle* + tabla dinámica
 ### Flujo del usuario
 
 1. Elige el **mes de corte** (último día del mes; solo meses cerrados) y la **subsidiaria** (por defecto SIIGO S.A.S).
-2. **Generar reporte**: el navegador lanza las consultas a NetSuite por tramos (3 a la vez, con reintento) y muestra el avance por tramo. Octubre 2026 tarda ~3 min.
+2. **Generar reporte**: el navegador lanza las consultas a NetSuite por tramos (3 a la vez, con reintento) y muestra el avance por tramo. Octubre 2026 tardó ~7 min (12 consultas).
 3. Resultado: indicadores (terceros negativos, saldo negativo, documentos a revisar, cartera total al corte), tabla de terceros con búsqueda y detalle desplegable, y **Descargar Excel**.
 
 ### Lógica
@@ -365,11 +365,12 @@ Lo mismo que el Excel manual, calculado desde NetSuite:
 ### Flujo técnico
 
 - `POST /api/conciliaciones/cartera-1305` con `accion`:
-  - `abiertas` `{ subsidiariaId, corte, desde|null, hasta }` → `{ partidas }`. Tramos (`tramosPartidas`): un año por consulta desde 2020 (el primero sin límite inferior) y el año del corte en dos mitades. En NetSuite el costo depende del **rango de fechas** más que de las filas: un año viejo con 12 partidas tarda lo mismo (~90 s) que un mes reciente con 13.000.
+  - `abiertas` `{ subsidiariaId, corte, desde|null, hasta }` → `{ partidas }`. Tramos (`tramosPartidas`), del más reciente al más viejo: los **3 últimos meses uno por uno** (concentran casi todas las facturas abiertas: octubre 2026 son ~13.000 filas = 14 páginas, y cada página es una ejecución), el resto de ese año en uno, y luego un año por consulta hasta 2020 (el primero sin límite inferior). Los años viejos traen pocas filas pero en NetSuite cuestan ~90 s cada uno por el rango de fechas. Un tramo de 4 meses (~25.000 filas) pasó de 5 min: no sirve en Vercel (máx. 300 s por llamada).
   - `aplicaciones` `{ subsidiariaId, corte, desde, hasta }` → `{ partidas }` con `devolver`. Tramos mensuales de corte+1 a hoy (`tramosAplicaciones`), para no pasar las 100.000 filas por consulta si el corte es antiguo. Dos consultas por tramo: la partida como documento aplicado y como documento que aplica.
   - `terceros` `{ ids }` (máx. 900) → nombre (`BUILTIN.DF`) y `custentity_ks_documento`.
 - Las partidas viajan como tuplas (`PartidaTupla`): Vercel limita la respuesta a 4,5 MB.
 - Todas las consultas ordenan por `tal.transaction, tal.transactionline`: sin `ORDER BY` NetSuite perdió filas entre páginas en las pruebas.
+- NetSuite se consulta en vivo: entre páginas entra o sale alguna partida (13.103 reportadas vs 13.102 recibidas). Se quitan repetidos por línea y se acepta una diferencia de hasta el 0,1 % (mín. 5 filas) en vez de fallar el tramo.
 - Lógica: `src/lib/conciliaciones/cartera-1305.ts` (SQL, servidor), `cartera-1305-shared.ts` (tramos, unión y cálculo), `cartera-1305-excel.ts` (Excel en el navegador). UI: `src/components/conciliaciones/cartera-1305/cartera-1305-page.tsx`.
 
 ### Excel
@@ -380,7 +381,7 @@ Lo mismo que el Excel manual, calculado desde NetSuite:
 
 ### Validación con octubre 2026 (SIIGO S.A.S)
 
-Contra el Excel manual *Informe 1305 Negativa Octubre 2026*: **1.496 terceros y 1.530 documentos** en ambos; 1.516 documentos coinciden al peso. Cartera total 31.095,9 M vs 31.115,1 M del informe de NetSuite (0,06 %). Diferencias: dos documentos de terceros a los que después se les cambió el KS Documento (se agregó `001`), una nota crédito de −74.931 que se perdió por paginar sin orden (corregido) y un diario de −37. El 31/10 existe el asiento 2005417 por 527.983.175,45, el total del informe manual: la reclasificación hecha con este resultado.
+Contra el Excel manual *Informe 1305 Negativa Octubre 2026* (1.496 terceros, 1.530 documentos, −527.983.175,45): la página dio el 24/11/2026 **1.497 terceros y 1.531 documentos por −527.983.212,45**, en 440 s. La única diferencia es un diario de −37. En el cruce documento a documento con las consultas de prueba, 1.516 coinciden al peso. Cartera total 31.095,9 M vs 31.115,1 M del informe de NetSuite (0,06 %). Diferencias: dos documentos de terceros a los que después se les cambió el KS Documento (se agregó `001`), una nota crédito de −74.931 que se perdió por paginar sin orden (corregido) y un diario de −37. El 31/10 existe el asiento 2005417 por 527.983.175,45, el total del informe manual: la reclasificación hecha con este resultado.
 
 ## Errores
 
