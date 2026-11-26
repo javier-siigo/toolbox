@@ -20,9 +20,6 @@ import type { Partida, Tercero } from "./cartera-1305-shared";
  * Todos los valores que entran al SQL llegan validados (fechas YYYY-MM-DD, ids numéricos).
  */
 
-/** Páginas de una misma consulta en paralelo: el navegador ya corre varios tramos a la vez. */
-const PAGINAS_EN_PARALELO = 2;
-
 interface CuentaAR {
   id: string;
   numero: string;
@@ -42,46 +39,51 @@ export const getCuentas1305 = unstable_cache(
   { revalidate: 3600 },
 );
 
-/** Todas las páginas de una consulta (ordenada por claves únicas), con el total verificado. */
+/** Consulta corta (cuentas, nombres de terceros): una sola página de hasta 1.000 filas. */
 async function consultar(query: string, signal?: AbortSignal): Promise<Record<string, unknown>[]> {
   const config: NetSuiteConfig = netsuiteConfig();
   const token = await getAccessToken(config, signal);
-  const primera = await suiteQLPageAt(config, token, query, 0, signal);
-  const total = primera.total ?? primera.items.length;
-  if (total > SUITEQL_MAX_RESULTS) {
-    throw new NetSuiteError(
-      `La consulta devuelve ${total} filas y NetSuite solo permite ${SUITEQL_MAX_RESULTS}.`,
-      "netsuite_limit",
-    );
+  const { items, total } = await suiteQLPageAt(config, token, query, 0, signal);
+  if ((total ?? items.length) > PAGE_SIZE) {
+    throw new NetSuiteError(`La consulta devolvió ${total} filas y se esperaban máximo ${PAGE_SIZE}.`, "netsuite_query");
   }
-  const offsets: number[] = [];
-  for (let o = PAGE_SIZE; o < total; o += PAGE_SIZE) offsets.push(o);
-  const paginas: Record<string, unknown>[][] = [primera.items];
-  for (let i = 0; i < offsets.length; i += PAGINAS_EN_PARALELO) {
-    const lote = await Promise.all(
-      offsets.slice(i, i + PAGINAS_EN_PARALELO).map((o) => suiteQLPageAt(config, token, query, o, signal)),
-    );
-    for (const p of lote) paginas.push(p.items);
+  return items;
+}
+
+/**
+ * Todas las filas de una consulta de partidas, paginando **por llave** (la última
+ * transacción y línea leídas) y no por posición. NetSuite se consulta en vivo: con
+ * `offset`, si entre una página y otra se aplica o se cierra una partida, las filas se
+ * corren un puesto y una queda por fuera (así se perdió una nota crédito de ~60.000 en
+ * una corrida real). Con la llave cada página sigue exactamente donde terminó la anterior.
+ * Las páginas van en serie: ~5 s cada una, un mes reciente (~13 páginas) en ~1 min.
+ *
+ * `armar` recibe la condición de llave para agregar al WHERE y debe ordenar por
+ * `tal.transaction, tal.transactionline` (únicos por fila).
+ */
+async function consultarPorLlave(
+  armar: (despues: string) => string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>[]> {
+  const config: NetSuiteConfig = netsuiteConfig();
+  const token = await getAccessToken(config, signal);
+  const filas: Record<string, unknown>[] = [];
+  let despues = "1 = 1";
+  for (;;) {
+    const { items } = await suiteQLPageAt(config, token, armar(despues), 0, signal);
+    filas.push(...items);
+    if (items.length < PAGE_SIZE) return filas;
+    if (filas.length >= SUITEQL_MAX_RESULTS) {
+      throw new NetSuiteError(`El tramo supera ${SUITEQL_MAX_RESULTS} filas.`, "netsuite_limit");
+    }
+    const ultima = items[items.length - 1]!;
+    const tid = Number(ultima.tid);
+    const lid = Number(ultima.lid);
+    if (!Number.isInteger(tid) || !Number.isInteger(lid)) {
+      throw new NetSuiteError("NetSuite devolvió una fila sin transacción o línea.", "netsuite_query");
+    }
+    despues = `(tal.transaction > ${tid} OR (tal.transaction = ${tid} AND tal.transactionline > ${lid}))`;
   }
-  // NetSuite se consulta en vivo: entre una página y otra pueden entrar o salir partidas
-  // (en las pruebas, ±1 fila en 13.000). Con el orden estable eso solo corre una fila de
-  // página, así que se quitan los repetidos en vez de fallar; lo que cambió en esos
-  // segundos es tan válido como lo que había.
-  const vistas = new Set<string>();
-  const filas = paginas.flat().filter((r) => {
-    const k = `${r.tid ?? r.id}:${r.lid ?? ""}`;
-    if (vistas.has(k)) return false;
-    vistas.add(k);
-    return true;
-  });
-  const faltan = total - filas.length;
-  if (faltan > Math.max(5, total * 0.001)) {
-    throw new NetSuiteError(
-      `NetSuite reportó ${total} filas pero se recibieron ${filas.length}. Intenta de nuevo.`,
-      "netsuite_query",
-    );
-  }
-  return filas;
 }
 
 const fecha = (f: string) => `TO_DATE('${f}', 'YYYY-MM-DD')`;
@@ -139,14 +141,15 @@ export async function partidasAbiertas(
 ): Promise<Partida[]> {
   const { cuentas, numeroCuenta } = await contexto();
   const rango = desde ? `t.trandate BETWEEN ${fecha(desde)} AND ${fecha(hasta)}` : `t.trandate <= ${fecha(hasta)}`;
-  const filas = await consultar(
-    `SELECT ${COLUMNAS}
+  const filas = await consultarPorLlave(
+    (despues) => `SELECT ${COLUMNAS}
 FROM transactionaccountingline tal
 JOIN transaction t ON t.id = tal.transaction
 JOIN transactionline tl ON tl.transaction = tal.transaction AND tl.id = tal.transactionline
 WHERE ${BASE(cuentas, subsidiaria)}
   AND (tal.amountunpaid <> 0 OR tal.paymentamountunused <> 0)
   AND ${rango}
+  AND ${despues}
 ORDER BY tal.transaction, tal.transactionline`,
     signal,
   );
@@ -166,7 +169,7 @@ export async function partidasConAplicaciones(
   signal?: AbortSignal,
 ): Promise<Partida[]> {
   const { cuentas, numeroCuenta } = await contexto();
-  const lado = (propio: "previous" | "next", otro: "previous" | "next") => `
+  const lado = (propio: "previous" | "next", otro: "previous" | "next") => (despues: string) => `
 SELECT ${COLUMNAS}, SUM(l.foreignamount) AS devolver
 FROM previoustransactionlinelink l
 JOIN transactionaccountingline tal ON tal.transaction = l.${propio}doc AND tal.transactionline = l.${propio}line
@@ -176,12 +179,13 @@ WHERE l.linktype = 'Payment'
   AND l.${propio}date <= ${fecha(corte)}
   AND l.${otro}date BETWEEN ${fecha(desde)} AND ${fecha(hasta)}
   AND ${BASE(cuentas, subsidiaria)}
+  AND ${despues}
 GROUP BY tal.transaction, tal.transactionline, t.type, t.tranid, t.trandate, t.duedate,
   COALESCE(tl.entity, t.entity), tal.account, tal.amount, tal.amountunpaid, tal.paymentamountunused
 ORDER BY tal.transaction, tal.transactionline`;
   const [aplicadas, aplicantes] = await Promise.all([
-    consultar(lado("previous", "next"), signal),
-    consultar(lado("next", "previous"), signal),
+    consultarPorLlave(lado("previous", "next"), signal),
+    consultarPorLlave(lado("next", "previous"), signal),
   ]);
   return [...aplicadas, ...aplicantes].map((r) => aPartida(r, numeroCuenta, num(r.devolver)));
 }

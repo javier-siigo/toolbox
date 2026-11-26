@@ -369,8 +369,7 @@ Lo mismo que el Excel manual, calculado desde NetSuite:
   - `aplicaciones` `{ subsidiariaId, corte, desde, hasta }` → `{ partidas }` con `devolver`. Tramos mensuales de corte+1 a hoy (`tramosAplicaciones`), para no pasar las 100.000 filas por consulta si el corte es antiguo. Dos consultas por tramo: la partida como documento aplicado y como documento que aplica.
   - `terceros` `{ ids }` (máx. 900) → nombre (`BUILTIN.DF`) y `custentity_ks_documento`.
 - Las partidas viajan como tuplas (`PartidaTupla`): Vercel limita la respuesta a 4,5 MB.
-- Todas las consultas ordenan por `tal.transaction, tal.transactionline`: sin `ORDER BY` NetSuite perdió filas entre páginas en las pruebas.
-- NetSuite se consulta en vivo: entre páginas entra o sale alguna partida (13.103 reportadas vs 13.102 recibidas). Se quitan repetidos por línea y se acepta una diferencia de hasta el 0,1 % (mín. 5 filas) en vez de fallar el tramo.
+- **Paginación por llave, no por `offset`.** NetSuite se consulta en vivo: con `offset`, si entre una página y otra se aplica o se cierra una partida, las filas se corren un puesto y una queda por fuera. Pasó en una corrida real del 25/11/2026: faltó una nota crédito y el total dio −527.922.645,45 en vez de −527.983.175,45. Cada página pide `(tal.transaction, tal.transactionline)` mayor que la última leída, ordenando por esas dos columnas, así ninguna fila se salta ni se repite. Las páginas de un tramo van en serie (~5 s cada una).
 - Lógica: `src/lib/conciliaciones/cartera-1305.ts` (SQL, servidor), `cartera-1305-shared.ts` (tramos, unión y cálculo), `cartera-1305-excel.ts` (Excel en el navegador). UI: `src/components/conciliaciones/cartera-1305/cartera-1305-page.tsx`.
 
 ### Excel
