@@ -498,7 +498,11 @@ export function ConciliacionesPageClient({
           const limite = Date.now() + POLL_TIMEOUT_MS;
           do {
             if (Date.now() > limite) {
-              fail("La conciliación tardó más de 15 minutos. Revisa el flujo en n8n e intenta de nuevo.");
+              // Si n8n se cae (p. ej. sin memoria con extractos muy grandes) no deja estado:
+              // la única señal es que pasa el tiempo sin resultado.
+              fail(
+                "La conciliación no terminó en 15 minutos. Lo más probable es que el extracto sea demasiado grande para procesarlo de una vez: divídelo en partes más pequeñas (por ejemplo, por quincena) e intenta de nuevo. Si con archivos pequeños tampoco funciona, avisa a soporte.",
+              );
               return;
             }
             await esperar(POLL_INTERVAL_MS, signal);
